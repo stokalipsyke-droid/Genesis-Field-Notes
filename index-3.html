@@ -1,0 +1,2662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Genesis Field Notes</title>
+<meta name="description" content="A notebook-first field notes workbook. Phase 1 prototype." />
+
+<!-- Fonts: Boska (display) + Satoshi (body/UI) via Fontshare. Degrades to system-ui offline. -->
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=boska@400,500,700&f[]=satoshi@400,500,700&display=swap" />
+
+<style>
+/* ============================================================
+   THEME TOKENS
+   ============================================================ */
+:root {
+  --bg: #061A33;
+  --panel: #0B2545;
+  --panel-2: #0f315d;
+  --panel-3: #133b72;
+  --text: #A8E4FF;
+  --text-dim: rgba(168, 228, 255, 0.68);
+  --text-faint: rgba(168, 228, 255, 0.42);
+  --accent: #67C3FF;
+  --accent-soft: rgba(103, 195, 255, 0.18);
+  --line: rgba(168, 228, 255, 0.16);
+  --line-strong: rgba(168, 228, 255, 0.28);
+  --success: #8FE3B0;
+  --warning: #FFD27A;
+  --danger: #FF8FA3;
+  --shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+
+  --font-display: "Boska", Georgia, serif;
+  --font-body: "Satoshi", system-ui, -apple-system, sans-serif;
+
+  --toolbar-h: 52px;
+  --statusbar-h: 30px;
+  --radius: 10px;
+  --motion: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ============================================================
+   RESET / BASE
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden; /* single-primary-scroll rule */
+}
+button, input, textarea {
+  font-family: inherit;
+  color: inherit;
+}
+::selection { background: var(--accent-soft); }
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 8px;
+  z-index: 999;
+  background: var(--panel-3);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+}
+.skip-link:focus { left: 8px; }
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* Toolbar --------------------------------------------------- */
+.toolbar {
+  height: var(--toolbar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 6px;
+  user-select: none;
+}
+.brand svg { width: 22px; height: 22px; color: var(--accent); flex: 0 0 auto; }
+.brand .brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+.toolbar .spacer { flex: 1 1 auto; }
+
+.btn {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion), color var(--motion), border-color var(--motion), transform var(--motion);
+  white-space: nowrap;
+}
+.btn:hover { background: var(--panel-3); color: var(--text); border-color: var(--line-strong); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn.primary { background: var(--accent-soft); color: var(--text); border-color: var(--line-strong); }
+.btn.icon { padding: 6px 9px; }
+
+/* Workspace grid ------------------------------------------- */
+.workspace {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  min-height: 0;
+}
+body.hide-workbook .workspace { grid-template-columns: 0 minmax(0, 1fr) 320px; }
+body.hide-inspector .workspace { grid-template-columns: 280px minmax(0, 1fr) 0; }
+body.hide-workbook.hide-inspector .workspace { grid-template-columns: 0 minmax(0, 1fr) 0; }
+
+.pane {
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--panel);
+}
+.workbook-pane { border-right: 1px solid var(--line); }
+.inspector-pane { border-left: 1px solid var(--line); background: var(--panel); }
+body.hide-workbook .workbook-pane,
+body.hide-inspector .inspector-pane { display: none; }
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  z-index: 2;
+}
+.pane-head h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* Search ---------------------------------------------------- */
+.search-wrap { padding: 0 12px 8px; }
+.search-input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  transition: border-color var(--motion);
+}
+.search-input::placeholder { color: var(--text-faint); }
+.search-input:focus { outline: none; border-color: var(--accent); }
+
+/* Workbook list -------------------------------------------- */
+.page-list { list-style: none; margin: 0; padding: 4px 8px 16px; }
+.page-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background var(--motion), border-color var(--motion);
+  margin-bottom: 2px;
+}
+.page-item:hover { background: var(--panel-2); }
+.page-item.selected { background: var(--panel-3); border-color: var(--line-strong); }
+.page-item .pin { flex: 0 0 auto; width: 14px; height: 14px; color: var(--accent); opacity: 0.9; }
+.page-item .pin.hidden { visibility: hidden; }
+.page-item .title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+.page-item.selected .title { color: var(--text); }
+.page-item .reorder { display: flex; flex-direction: column; gap: 1px; opacity: 0; transition: opacity var(--motion); }
+.page-item:hover .reorder { opacity: 1; }
+.mini {
+  background: transparent;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 4px;
+}
+.mini:hover { color: var(--text); background: var(--panel); }
+
+.empty-hint {
+  color: var(--text-faint);
+  font-size: 12.5px;
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+/* Notebook pane -------------------------------------------- */
+.notebook-pane {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+.notebook-frame {
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 34px 40px 120px;
+}
+.page-header { margin-bottom: 18px; }
+.page-title {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.2;
+  color: var(--text);
+  padding: 4px 0 8px;
+  transition: border-color var(--motion);
+}
+.page-title::placeholder { color: var(--text-faint); }
+.page-title:focus { outline: none; border-bottom-color: var(--line-strong); }
+.page-meta {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-top: 6px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.editor-surface {
+  min-height: 45vh;
+  outline: none;
+  font-size: 15.5px;
+  line-height: 1.72;
+  color: var(--text-dim);
+}
+.editor-surface:focus { color: var(--text); }
+.editor-surface p { margin: 0 0 0.9em; }
+.editor-surface h1, .editor-surface h2, .editor-surface h3 {
+  font-family: var(--font-display);
+  color: var(--text);
+  line-height: 1.3;
+  margin: 1.2em 0 0.4em;
+}
+.editor-surface h1 { font-size: 24px; }
+.editor-surface h2 { font-size: 20px; }
+.editor-surface h3 { font-size: 17px; }
+.editor-surface ul, .editor-surface ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+.editor-surface li { margin-bottom: 0.25em; }
+.editor-surface blockquote {
+  margin: 0 0 0.9em;
+  padding-left: 14px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-faint);
+  font-style: italic;
+}
+.editor-surface:empty::before {
+  content: "Start writing\2026";
+  color: var(--text-faint);
+  pointer-events: none;
+}
+/* Artifact marks (Phase 2) */
+.artifact-mark {
+  background: var(--accent-soft);
+  border-bottom: 1px dashed var(--accent);
+  border-radius: 2px;
+  cursor: pointer;
+  padding: 0 1px;
+  transition: background var(--motion);
+}
+.artifact-mark:hover { background: rgba(103, 195, 255, 0.30); }
+.artifact-mark.selected { background: rgba(103, 195, 255, 0.38); box-shadow: 0 0 0 1px var(--accent); }
+.artifact-mark.related { box-shadow: 0 0 0 1px var(--warning); background: rgba(255, 200, 120, 0.14); }
+
+/* Model space (Phase 4) ------------------------------------ */
+.model-space {
+  position: absolute; inset: 0; z-index: 5; display: none;
+  flex-direction: column; background: var(--bg);
+}
+body.model-open .model-space { display: flex; }
+body.model-open .editor-surface, body.model-open .page-header { visibility: hidden; }
+.model-toolbar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-bottom: 1px solid var(--line); background: var(--panel); flex: 0 0 auto;
+}
+.model-title { font-family: var(--font-display); font-size: 15px; color: var(--text); }
+.model-hint { font-size: 11.5px; color: var(--text-faint); }
+.model-toolbar .spacer { flex: 1 1 auto; }
+.model-toolbar .mini {
+  border: 1px solid var(--line); color: var(--text-dim); font-size: 12px;
+  padding: 4px 9px; min-width: 30px; text-align: center;
+}
+.model-toolbar .mini:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
+.model-svg {
+  flex: 1 1 auto; width: 100%; height: 100%; display: block; cursor: grab;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(103,195,255,0.09) 1px, transparent 0) 0 0 / 26px 26px;
+  touch-action: none; user-select: none;
+}
+.model-svg.panning { cursor: grabbing; }
+.model-empty {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: var(--text-faint); font-size: 13px; text-align: center; pointer-events: none;
+}
+/* Relations (edges) */
+.model-edge { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.model-edge.is-link { stroke: var(--warning); stroke-dasharray: 5 4; }
+.model-edge.muted { opacity: 0.16; }
+.model-edge-label {
+  fill: var(--text-dim); font-size: 9.5px; font-family: var(--font-body);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none;
+}
+/* Artifact nodes (circles) */
+.model-node { cursor: pointer; }
+.model-node circle.node-body {
+  fill: var(--panel-2); stroke: var(--accent); stroke-width: 2;
+  transition: stroke-width var(--motion), filter var(--motion);
+}
+.model-node[data-subtype="claim"] circle.node-body { stroke: var(--accent); }
+.model-node[data-subtype="evidence"] circle.node-body { stroke: var(--success); }
+.model-node[data-subtype="question"] circle.node-body { stroke: var(--warning); }
+.model-node[data-subtype="term"] circle.node-body { stroke: var(--danger); }
+.model-node .node-label {
+  fill: var(--text); font-size: 10.5px; font-family: var(--font-body);
+  paint-order: stroke; stroke: var(--bg); stroke-width: 3.5px; pointer-events: none;
+}
+.model-node .node-id { fill: var(--text-faint); font-size: 8.5px; pointer-events: none; }
+.model-node:hover circle.node-body { stroke-width: 3; }
+.model-node.selected circle.node-body { stroke-width: 3.5; filter: drop-shadow(0 0 6px var(--accent)); }
+.model-node.related circle.node-body { stroke-dasharray: 3 2.5; }
+.model-node.muted { opacity: 0.28; }
+.model-node.dragging { cursor: grabbing; }
+body.model-open .drawer-toggle { display: none; }
+#modelSpaceBtn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+@keyframes pulse-mark {
+  0%, 100% { background: var(--accent-soft); }
+  50% { background: rgba(103, 195, 255, 0.5); }
+}
+.artifact-mark.pulse { animation: pulse-mark 0.6s ease 2; }
+
+/* subtype colour accents on the left dot in inspector chips */
+.artifact-mark[data-artifact-type="claim"] { border-bottom-color: var(--accent); }
+.artifact-mark[data-artifact-type="evidence"] { border-bottom-color: var(--success); }
+.artifact-mark[data-artifact-type="question"] { border-bottom-color: var(--warning); }
+.artifact-mark[data-artifact-type="term"] { border-bottom-color: var(--danger); }
+
+.notebook-locked-note {
+  color: var(--warning);
+  font-size: 12px;
+  margin-bottom: 10px;
+  display: none;
+}
+body.page-locked .notebook-locked-note { display: block; }
+
+/* Inspector ------------------------------------------------- */
+.inspector-body { padding: 6px 14px 30px; }
+.insp-section { margin-bottom: 20px; }
+.insp-label {
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 6px;
+}
+.insp-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.insp-field .k { color: var(--text-faint); }
+.insp-field .v { color: var(--text-dim); text-align: right; word-break: break-word; }
+.continuity-reminder {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.insp-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.insp-placeholder-note {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+/* Status bar ------------------------------------------------ */
+.statusbar {
+  height: var(--statusbar-h);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--panel-2);
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+.status-item { display: flex; align-items: center; gap: 6px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); transition: background var(--motion); }
+.dot.saved { background: var(--success); }
+.dot.saving { background: var(--warning); }
+.statusbar .spacer { flex: 1 1 auto; }
+
+/* Hidden SVG model space placeholder (PHASE 4 hook) */
+#modelspace { display: none; }
+
+/* Overlays -------------------------------------------------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 12, 26, 0.6);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+.overlay.open { display: flex; animation: fade var(--motion) ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.dialog {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  width: 100%;
+  max-width: 440px;
+  padding: 22px 22px 18px;
+}
+.dialog h3 {
+  font-family: var(--font-display);
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--text);
+}
+.dialog p { margin: 0 0 14px; color: var(--text-dim); font-size: 13.5px; }
+.dialog .actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Toast ----------------------------------------------------- */
+.toast {
+  position: fixed;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--panel-3);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--motion), transform var(--motion);
+  z-index: 200;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 900px) {
+  .workspace { grid-template-columns: minmax(0, 1fr) !important; }
+  .workbook-pane, .inspector-pane {
+    position: fixed;
+    top: var(--toolbar-h);
+    bottom: var(--statusbar-h);
+    width: 84vw;
+    max-width: 340px;
+    z-index: 50;
+    box-shadow: var(--shadow);
+    transform: translateX(-105%);
+    transition: transform var(--motion);
+  }
+  .inspector-pane { right: 0; left: auto; transform: translateX(105%); }
+  body.drawer-workbook .workbook-pane { transform: translateX(0); }
+  body.drawer-inspector .inspector-pane { transform: translateX(0); }
+  body.hide-workbook .workbook-pane,
+  body.hide-inspector .inspector-pane { display: block; }
+  .notebook-frame { padding: 24px 20px 100px; }
+  .drawer-toggle { display: inline-flex !important; }
+}
+.drawer-toggle { display: none; }
+
+/* No-JS graceful degradation -------------------------------- */
+.nojs-note {
+  padding: 8px 14px;
+  background: var(--warning);
+  color: #3a2a00;
+  font-size: 12.5px;
+  text-align: center;
+}
+.js-enabled .nojs-note { display: none; }
+.js-enabled .static-hint { display: none; }
+
+/* Backups panel in inspector ------------------------------- */
+.backup-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.backup-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.backup-item .when { color: var(--text-dim); }
+.backup-item .meta { color: var(--text-faint); font-size: 11px; }
+
+/* Auto-export toggle --------------------------------------- */
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 13px; color: var(--text-dim); }
+.switch { position: relative; width: 38px; height: 20px; flex: 0 0 auto; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .track {
+  position: absolute; inset: 0; background: var(--panel-3); border: 1px solid var(--line-strong);
+  border-radius: 999px; transition: background var(--motion);
+}
+.switch .track::before {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  background: var(--text-dim); border-radius: 50%; transition: transform var(--motion), background var(--motion);
+}
+.switch input:checked + .track { background: var(--accent-soft); }
+.switch input:checked + .track::before { transform: translateX(18px); background: var(--accent); }
+
+/* Search results ------------------------------------------- */
+.results { list-style: none; margin: 0; padding: 4px 8px 16px; }
+.result-item {
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; border: 1px solid transparent;
+  margin-bottom: 3px; transition: background var(--motion), border-color var(--motion);
+}
+.result-item:hover { background: var(--panel-2); border-color: var(--line); }
+.result-item .r-kind { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-faint); }
+.result-item .r-title { font-size: 13.5px; color: var(--text); }
+.result-item .r-snippet { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.result-item mark { background: var(--accent-soft); color: var(--text); border-radius: 2px; padding: 0 1px; }
+
+/* Artifact-type picker in dialog --------------------------- */
+.type-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.type-opt {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text-dim); cursor: pointer; font-size: 13px;
+  transition: all var(--motion);
+}
+.type-opt:hover { border-color: var(--line-strong); color: var(--text); }
+.type-opt.active { background: var(--accent-soft); border-color: var(--accent); color: var(--text); }
+.dialog textarea {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 54px; margin-bottom: 12px;
+}
+.dialog textarea:focus { outline: none; border-color: var(--accent); }
+.dialog .quote-preview {
+  background: var(--panel-2); border-left: 2px solid var(--accent); border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; color: var(--text-dim); margin-bottom: 12px;
+  max-height: 90px; overflow-y: auto;
+}
+.dialog .relate-select, .dialog .relate-input {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); padding: 8px 10px; font-size: 13px;
+}
+.dialog .relate-select:focus, .dialog .relate-input:focus { outline: none; border-color: var(--accent); }
+.dialog .relate-select option { background: var(--panel); color: var(--text); }
+
+/* Relations in inspector ----------------------------------- */
+.relation-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.relation-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; font-size: 12.5px;
+  transition: border-color var(--motion), background var(--motion);
+}
+.relation-row:hover { border-color: var(--line-strong); background: var(--panel); }
+.relation-row.selected { border-color: var(--accent); background: var(--accent-soft); }
+.rel-glyph { width: 28px; height: 12px; flex: 0 0 auto; overflow: visible; }
+.rel-glyph line, .rel-glyph path { stroke: var(--accent); stroke-width: 2; fill: none; }
+.rel-glyph.dashed line, .rel-glyph.dashed path { stroke: var(--warning); stroke-dasharray: 3 3; }
+.rel-glyph.inline { vertical-align: middle; margin-right: 4px; }
+.rel-con line { stroke: var(--accent); }
+.rel-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.rel-label { color: var(--text); font-size: 12.5px; }
+.rel-label em { color: var(--text-faint); font-style: italic; }
+.rel-end { color: var(--text-dim); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rel-weight { color: var(--warning); font-size: 9px; letter-spacing: 1px; flex: 0 0 auto; }
+.rel-del {
+  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 5px; border: 1px solid transparent;
+  background: transparent; color: var(--text-faint); cursor: pointer; font-size: 15px; line-height: 1;
+}
+.rel-del:hover { color: var(--danger); border-color: var(--line); background: var(--panel); }
+.muted { color: var(--text-faint); font-size: 11px; }
+
+/* Drag-drop import overlay --------------------------------- */
+.drop-veil {
+  position: fixed; inset: 0; z-index: 300; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(6, 26, 51, 0.86); backdrop-filter: blur(2px);
+}
+.drop-veil.show { display: flex; }
+.drop-veil .drop-card {
+  border: 2px dashed var(--accent); border-radius: 16px; padding: 40px 56px;
+  font-family: var(--font-display); font-size: 20px; color: var(--text);
+}
+
+/* Artifact chip in inspector ------------------------------- */
+.artifact-chips { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.artifact-chip {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px;
+  background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; font-size: 12.5px;
+  transition: border-color var(--motion), background var(--motion);
+}
+.artifact-chip:hover { border-color: var(--line-strong); background: var(--panel-3); }
+.artifact-chip .chip-id { color: var(--accent); font-weight: 500; flex: 0 0 auto; }
+.artifact-chip .chip-quote { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+
+<body>
+<a class="skip-link" href="#notebook">Skip to notebook</a>
+
+<div class="nojs-note">JavaScript is disabled. Genesis is showing readable notebook content only — full interaction is unavailable.</div>
+
+<div class="app-shell">
+
+  <!-- TOOLBAR -->
+  <header class="toolbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-label="Genesis logo">
+        <circle cx="12" cy="12" r="9" opacity="0.35"/>
+        <circle cx="12" cy="12" r="3.4"/>
+        <path d="M12 3v3.6M12 17.4V21M3 12h3.6M17.4 12H21"/>
+      </svg>
+      <span class="brand-name">Genesis Field Notes</span>
+    </div>
+
+    <button class="btn drawer-toggle" id="toggleWorkbookDrawer" title="Toggle workbook">Pages</button>
+    <button class="btn primary" id="newPageBtn">+ New page</button>
+    <button class="btn" id="markArtifactBtn" title="Turn the current selection into an artifact (Ctrl/Cmd+M)" disabled>Mark artifact</button>
+    <button class="btn" id="modelSpaceBtn" title="Toggle the model-space projection (Ctrl/Cmd+E)" aria-pressed="false">Model space</button>
+
+    <div class="spacer"></div>
+
+    <button class="btn icon" id="toggleWorkbookBtn" title="Show/hide workbook pane">Workbook</button>
+    <button class="btn icon" id="toggleInspectorBtn" title="Show/hide inspector pane">Inspector</button>
+    <button class="btn" id="exportBtn" title="Export workbook as JSON">Export</button>
+    <button class="btn" id="importBtn" title="Import workbook from JSON">Import</button>
+    <button class="btn drawer-toggle" id="toggleInspectorDrawer" title="Toggle inspector">Info</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden />
+  </header>
+
+  <!-- WORKSPACE -->
+  <div class="workspace">
+
+    <!-- WORKBOOK PANE -->
+    <aside class="pane workbook-pane" aria-label="Workbook pages">
+      <div class="pane-head"><h2>Workbook</h2></div>
+      <div class="search-wrap">
+        <input class="search-input" id="searchInput" type="search" placeholder="Search pages &amp; text…" aria-label="Search notebook" />
+      </div>
+      <ul class="page-list" id="pageList">
+        <li class="empty-hint static-hint">Your pages will appear here.</li>
+      </ul>
+    </aside>
+
+    <!-- NOTEBOOK PANE -->
+    <main id="notebook" class="pane notebook-pane" aria-label="Notebook">
+      <div class="notebook-frame">
+        <div class="notebook-locked-note">This page is locked. Editing is disabled.</div>
+        <header class="page-header">
+          <input class="page-title" id="pageTitle" type="text" placeholder="Untitled Page" aria-label="Page title" />
+          <div class="page-meta" id="pageMeta"></div>
+        </header>
+        <article
+          id="editor"
+          class="editor-surface"
+          contenteditable="true"
+          spellcheck="true"
+          aria-label="Notebook page editor"
+        ><p></p></article>
+      </div>
+
+      <!-- MODEL SPACE OVERLAY (Phase 4) — SVG projection of notebook-originated state -->
+      <section id="modelSpace" class="model-space" aria-label="Model space projection">
+        <div class="model-toolbar">
+          <span class="model-title">Model space</span>
+          <span class="model-hint">Drag nodes to place · scroll to zoom · drag canvas to pan</span>
+          <div class="spacer"></div>
+          <button class="mini" id="modelAutoLayout" title="Re-run automatic layout">Auto-layout</button>
+          <button class="mini" id="modelZoomOut" aria-label="Zoom out">−</button>
+          <button class="mini" id="modelZoomReset" title="Reset view">Reset</button>
+          <button class="mini" id="modelZoomIn" aria-label="Zoom in">+</button>
+        </div>
+        <svg id="modelSvg" class="model-svg" role="img" aria-label="Relational model projection">
+          <g id="modelViewport" class="model-viewport">
+            <g id="layerConnectionsG" class="model-layer layer-connections"></g>
+            <g id="layerLinksG" class="model-layer layer-links"></g>
+            <g id="layerArtifactsG" class="model-layer layer-artifacts"></g>
+          </g>
+        </svg>
+        <div class="model-empty" id="modelEmpty" hidden>No artifacts yet. Mark text in the notebook to populate model space.</div>
+      </section>
+    </main>
+
+    <!-- INSPECTOR PANE -->
+    <aside class="pane inspector-pane" aria-label="Inspector">
+      <div class="pane-head"><h2>Inspector</h2></div>
+      <div class="inspector-body" id="inspectorBody">
+        <!-- rendered by JS; static fallback below -->
+        <div class="insp-section static-hint">
+          <p class="insp-label">Passive panel</p>
+          <div class="continuity-reminder">The inspector reflects your current selection. It becomes interactive when JavaScript is enabled.</div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="status-item"><span class="dot" id="saveDot"></span><span id="saveState">Ready</span></div>
+    <div class="status-item" id="pageCountStat">0 pages</div>
+    <div class="spacer"></div>
+    <div class="status-item" id="currentPageStat">No page</div>
+    <div class="status-item" id="autosaveStat" title="Automatic backup status"></div>
+    <div class="status-item">Phase 4</div>
+  </footer>
+</div>
+
+<!-- Templates -->
+<template id="page-item-template">
+  <li class="page-item" role="button" tabindex="0">
+    <svg class="pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2l1 5 4 3-5 1-1 5-3-5-5-1 5-1 1-5 3-2z" opacity="0"/><path d="M9 2h6l-1 6 3 3v2h-4v7l-1 2-1-2v-7H6v-2l3-3z"/></svg>
+    <span class="title"></span>
+    <span class="reorder">
+      <button class="mini up" title="Move up">&#9650;</button>
+      <button class="mini down" title="Move down">&#9660;</button>
+    </span>
+  </li>
+</template>
+
+<!-- Confirmation dialog -->
+<div class="overlay" id="dialogOverlay">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <h3 id="dlgTitle">Title</h3>
+    <p id="dlgBody">Body</p>
+    <div class="actions" id="dlgActions"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Drag-and-drop import veil -->
+<div class="drop-veil" id="dropVeil"><div class="drop-card">Drop a workbook .json to import</div></div>
+
+<script>
+/* ============================================================
+   GENESIS FIELD NOTES — Phase 1 + 2 + 3 + 4
+   Single-file, no-build, file:// safe. Classic script (no ES modules).
+
+   Architecture (simplified from blueprint):
+     - Notebook DOM is the canonical writing surface.
+     - `state` (workbook JSON) is the canonical application state.
+     - Every pane is a projection: render() paints all panes from state.
+     - Mutations = plain functions that change state -> render() + save().
+
+   Phase 2 adds: selection capture, artifact creation + wrapper spans,
+   range serialization/hydration, inspector-follows-selection, and
+   notebook-first search with jump-to-range.
+
+   Automatic portability: rolling LocalStorage backups, optional periodic
+   file auto-export, and drag-and-drop JSON import.
+   ============================================================ */
+document.documentElement.classList.add('js-enabled');
+document.body.classList.add('js-enabled');
+
+const STORAGE_KEY = 'genesis-field-notes::workbook';
+const BACKUP_KEY = 'genesis-field-notes::backups';
+const STORAGE_VERSION = 1;
+const MAX_BACKUPS = 8;              // rolling snapshots kept in LocalStorage
+const BACKUP_INTERVAL_MS = 120000; // a snapshot at most every 2 min of activity
+const AUTO_EXPORT_INTERVAL_MS = 300000; // periodic file download when enabled (5 min)
+
+/* ---------- helpers ---------- */
+const uid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2));
+const now = () => Date.now();
+const $ = (sel) => document.querySelector(sel);
+const el = {};
+
+function slugify(s) {
+  return (s || 'untitled').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'untitled';
+}
+function fmtDate(ts) {
+  try { return new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  catch (e) { return String(ts); }
+}
+
+/* ============================================================
+   STATE — trimmed Phase-1 schema (hooks kept for later phases)
+   ============================================================ */
+function createWorkbook() {
+  const wbId = uid();
+  const state = {
+    workbook: {
+      id: wbId,
+      title: 'Genesis Field Notes',
+      openPageId: null,
+      pinnedPageId: null,
+      createdAt: now(),
+      updatedAt: now()
+    },
+    pages: [],
+    artifacts: [],
+    // Phase 3-5 hooks (kept empty so later layers slot in without restructuring)
+    connections: [],
+    links: [],
+    papers: [],
+    procedures: [],
+    ui: {
+      selectedPageId: null,
+      selectedArtifactId: null,
+      selectedRelationId: null, // 'C-0001' | 'L-0001'
+      searchQuery: '',
+      showInspector: true,
+      showWorkbook: true,
+      layers: { connections: true, links: true }, // Phase 3 relational layer toggles
+      modelSpace: false, // Phase 4: model-space overlay visible?
+      model: { zoom: 1, panX: 0, panY: 0 } // Phase 4: viewport transform
+    },
+    preferences: {
+      autoExport: false,
+      autoExportAt: 0
+    }
+  };
+  ensurePinnedPage(state);
+  return state;
+}
+
+function makePage(partial = {}) {
+  const title = partial.title || 'Untitled Page';
+  return Object.assign({
+    id: uid(),
+    title,
+    slug: slugify(title),
+    order: 0,
+    kind: 'page',
+    pinned: false,
+    locked: false,
+    html: '<p></p>',
+    plainText: '',
+    artifactIds: [],
+    createdAt: now(),
+    updatedAt: now()
+  }, partial);
+}
+
+/* The pinned continuity page is non-destructible. */
+function ensurePinnedPage(state) {
+  let pinned = state.pages.find(p => p.pinned);
+  if (!pinned) {
+    pinned = makePage({
+      title: 'Continuity',
+      kind: 'continuity',
+      pinned: true,
+      order: -1,
+      html: '<p>This is your continuity page. It cannot be deleted — it anchors the workbook across sessions. Use it for the through-line of your thinking: the questions you keep returning to, and where you left off.</p>',
+      plainText: 'This is your continuity page.'
+    });
+    state.pages.unshift(pinned);
+  }
+  state.workbook.pinnedPageId = pinned.id;
+  reindexOrder(state);
+  if (!state.ui.selectedPageId || !state.pages.find(p => p.id === state.ui.selectedPageId)) {
+    state.ui.selectedPageId = pinned.id;
+  }
+  return pinned;
+}
+
+function reindexOrder(state) {
+  // pinned pages first (by existing order), then the rest
+  const pinned = state.pages.filter(p => p.pinned);
+  const rest = state.pages.filter(p => !p.pinned);
+  pinned.concat(rest).forEach((p, i) => { p.order = i; });
+  state.pages.sort((a, b) => a.order - b.order);
+}
+
+/* ---------- page operations ---------- */
+function getSelectedPage(state) {
+  return state.pages.find(p => p.id === state.ui.selectedPageId) || state.pages[0];
+}
+
+function createPage(state, partial = {}) {
+  const p = makePage(Object.assign({ order: state.pages.length }, partial));
+  state.pages.push(p);
+  reindexOrder(state);
+  state.ui.selectedPageId = p.id;
+  touch(state);
+  return p;
+}
+
+function renamePage(state, pageId, title) {
+  const p = state.pages.find(x => x.id === pageId);
+  if (!p) return;
+  const clean = (title || '').trim();
+  p.title = clean || 'Untitled Page';
+  p.slug = slugify(p.title);
+  p.updatedAt = now();
+  touch(state);
+}
+
+function duplicatePage(state, pageId) {
+  const src = state.pages.find(x => x.id === pageId);
+  if (!src) return;
+  const copy = makePage({
+    title: src.title + ' (copy)',
+    kind: 'page',        // copies are never continuity/pinned
+    pinned: false,
+    locked: src.locked,
+    html: src.html,
+    plainText: src.plainText,
+    order: state.pages.length
+  });
+  state.pages.push(copy);
+  reindexOrder(state);
+  state.ui.selectedPageId = copy.id;
+  touch(state);
+  return copy;
+}
+
+function movePage(state, pageId, dir) {
+  reindexOrder(state);
+  const idx = state.pages.findIndex(p => p.id === pageId);
+  if (idx < 0) return;
+  const target = idx + dir;
+  if (target < 0 || target >= state.pages.length) return;
+  // don't let a normal page jump above a pinned page
+  if (state.pages[target].pinned) return;
+  const arr = state.pages;
+  [arr[idx], arr[target]] = [arr[target], arr[idx]];
+  arr.forEach((p, i) => p.order = i);
+  touch(state);
+}
+
+function deletePage(state, pageId) {
+  const p = state.pages.find(x => x.id === pageId);
+  if (!p) return { ok: false, reason: 'notfound' };
+  if (p.pinned) return { ok: false, reason: 'pinned' };
+  const idx = state.pages.findIndex(x => x.id === pageId);
+  // cascade: remove artifacts that originate from this page
+  state.artifacts = state.artifacts.filter(a => a.pageId !== pageId);
+  state.pages = state.pages.filter(x => x.id !== pageId);
+  reindexOrder(state);
+  if (state.ui.selectedPageId === pageId) {
+    const next = state.pages[Math.max(0, idx - 1)] || state.pages[0];
+    state.ui.selectedPageId = next ? next.id : null;
+  }
+  touch(state);
+  return { ok: true };
+}
+
+function touch(state) { state.workbook.updatedAt = now(); }
+
+/* ============================================================
+   ARTIFACTS (Phase 2) — created from notebook selections
+   ============================================================ */
+let artifactCounter = 0;
+function nextArtifactId(state) {
+  // stable sequential IDs (A-0001) that never collide with existing ones
+  const nums = state.artifacts.map(a => parseInt((a.id || '').replace('A-', ''), 10)).filter(n => !isNaN(n));
+  const max = nums.length ? Math.max(...nums) : 0;
+  artifactCounter = Math.max(artifactCounter, max);
+  artifactCounter += 1;
+  return 'A-' + String(artifactCounter).padStart(4, '0');
+}
+
+function makeArtifact(state, { pageId, subtype, quote, range }) {
+  return {
+    id: nextArtifactId(state),
+    pageId,
+    type: 'artifact',
+    subtype: subtype || 'claim',
+    quote: quote || '',
+    range: range || null,
+    references: [],
+    notes: '',
+    coordinates: { x: 0, y: 0, region: 'notebook-origin' }, // Phase 4 hook
+    health: { demand: 0, convergence: 0, dependency: 0, constraint: 0 }, // Phase 5 hook
+    createdAt: now(),
+    updatedAt: now()
+  };
+}
+
+function getArtifact(state, id) { return state.artifacts.find(a => a.id === id); }
+
+function deleteArtifact(state, id) {
+  const a = getArtifact(state, id);
+  if (!a) return;
+  state.artifacts = state.artifacts.filter(x => x.id !== id);
+  const page = state.pages.find(p => p.id === a.pageId);
+  if (page) page.artifactIds = (page.artifactIds || []).filter(x => x !== id);
+  if (state.ui.selectedArtifactId === id) state.ui.selectedArtifactId = null;
+  // cascade: drop any relation that touched this artifact (blueprint §11 - validate source/target existence)
+  state.connections = state.connections.filter(c => c.source !== id && c.target !== id);
+  state.links = state.links.filter(l => l.source !== id && l.target !== id);
+  // unwrap the mark from the live editor if it's mounted
+  const mark = el.editor.querySelector('[data-artifact-id="' + id + '"]');
+  if (mark) { unwrapMark(mark); syncEditorToState(); }
+  touch(state);
+}
+
+function unwrapMark(mark) {
+  const parent = mark.parentNode;
+  while (mark.firstChild) parent.insertBefore(mark.firstChild, mark);
+  parent.removeChild(mark);
+  parent.normalize();
+}
+
+/* ============================================================
+   RELATIONAL LAYER (Phase 3)
+   - connections = STRUCTURAL edges (solid). "depends on", "part of", "follows"
+   - links       = CONCEPTUAL edges (dashed, curved, weighted). loose association
+   Both validate that source/target artifacts exist.
+   ============================================================ */
+let connectionCounter = 0, linkCounter = 0;
+function nextConnectionId(state) {
+  const max = state.connections.reduce((m, c) => Math.max(m, parseInt((c.id || 'C-0').split('-')[1], 10) || 0), 0);
+  connectionCounter = Math.max(connectionCounter, max) + 1;
+  return 'C-' + String(connectionCounter).padStart(4, '0');
+}
+function nextLinkId(state) {
+  const max = state.links.reduce((m, l) => Math.max(m, parseInt((l.id || 'L-0').split('-')[1], 10) || 0), 0);
+  linkCounter = Math.max(linkCounter, max) + 1;
+  return 'L-' + String(linkCounter).padStart(4, '0');
+}
+
+function getRelation(state, id) {
+  if (!id) return null;
+  return state.connections.find(c => c.id === id) || state.links.find(l => l.id === id) || null;
+}
+
+/* return every relation touching an artifact, split by kind */
+function relationsForArtifact(state, artifactId) {
+  return {
+    connections: state.connections.filter(c => c.source === artifactId || c.target === artifactId),
+    links: state.links.filter(l => l.source === artifactId || l.target === artifactId)
+  };
+}
+
+function relationExists(state, kind, source, target) {
+  const arr = kind === 'connection' ? state.connections : state.links;
+  return arr.some(r =>
+    (r.source === source && r.target === target) ||
+    (r.source === target && r.target === source));
+}
+
+function createConnection(state, { source, target, label }) {
+  if (source === target) return null;
+  if (!getArtifact(state, source) || !getArtifact(state, target)) return null; // validate existence
+  if (relationExists(state, 'connection', source, target)) return null;
+  const c = { id: nextConnectionId(state), type: 'connection', source, target, label: label || '', notes: '', createdAt: now(), updatedAt: now() };
+  state.connections.push(c);
+  touch(state);
+  return c;
+}
+
+function createLink(state, { source, target, label, weight }) {
+  if (source === target) return null;
+  if (!getArtifact(state, source) || !getArtifact(state, target)) return null;
+  if (relationExists(state, 'link', source, target)) return null;
+  const l = { id: nextLinkId(state), type: 'link', source, target, label: label || '', weight: Math.min(3, Math.max(1, weight || 2)), notes: '', createdAt: now(), updatedAt: now() };
+  state.links.push(l);
+  touch(state);
+  return l;
+}
+
+function deleteRelation(state, id) {
+  state.connections = state.connections.filter(c => c.id !== id);
+  state.links = state.links.filter(l => l.id !== id);
+  if (state.ui.selectedRelationId === id) state.ui.selectedRelationId = null;
+  touch(state);
+}
+
+/* the "other end" of a relation relative to a given artifact */
+function relationOther(rel, artifactId) {
+  return rel.source === artifactId ? rel.target : rel.source;
+}
+function artifactLabel(state, id) {
+  const a = getArtifact(state, id);
+  if (!a) return id;
+  const q = (a.quote || '').trim();
+  return a.id + (q ? ' · “' + (q.length > 40 ? q.slice(0, 40) + '…' : q) + '”' : '');
+}
+
+/* ============================================================
+   PERSISTENCE
+   ============================================================ */
+function saveWorkbook(state) {
+  try {
+    const payload = { version: STORAGE_VERSION, savedAt: now(), workbook: state };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    return true;
+  } catch (e) { console.error('save failed', e); return false; }
+}
+
+function loadWorkbook() {
+  let raw;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return migrateWorkbook(parsed);
+  } catch (e) {
+    console.warn('Corrupt workbook in storage — starting fresh but preserving backup.');
+    try { localStorage.setItem(STORAGE_KEY + '::corrupt-backup', raw); } catch (_) {}
+    return null;
+  }
+}
+
+function migrateWorkbook(parsed) {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const wb = parsed.workbook || parsed; // tolerate raw state
+  if (!wb.pages || !Array.isArray(wb.pages)) return null;
+  // ensure new fields exist (forward migration)
+  wb.artifacts = wb.artifacts || [];
+  wb.connections = wb.connections || [];
+  wb.links = wb.links || [];
+  wb.papers = wb.papers || [];
+  wb.procedures = wb.procedures || [];
+  wb.ui = Object.assign({ selectedPageId: null, selectedArtifactId: null, selectedRelationId: null, searchQuery: '', showInspector: true, showWorkbook: true, modelSpace: false }, wb.ui || {});
+  wb.ui.layers = Object.assign({ connections: true, links: true }, wb.ui.layers || {});
+  wb.ui.model = Object.assign({ zoom: 1, panX: 0, panY: 0 }, wb.ui.model || {});
+  wb.preferences = Object.assign({ autoExport: false, autoExportAt: 0 }, wb.preferences || {});
+  wb.pages.forEach(p => {
+    p.artifactIds = p.artifactIds || [];
+    if (typeof p.locked !== 'boolean') p.locked = false;
+  });
+  // normalize artifact objects
+  wb.artifacts.forEach(a => {
+    a.references = a.references || [];
+    a.coordinates = a.coordinates || { x: 0, y: 0, region: 'notebook-origin' };
+    a.health = a.health || { demand: 0, convergence: 0, dependency: 0, constraint: 0 };
+    if (typeof a.notes !== 'string') a.notes = '';
+  });
+  // normalize relations (structural connections + conceptual links)
+  wb.connections = wb.connections.filter(c => c && c.source && c.target).map(c => Object.assign({
+    id: c.id, type: 'connection', source: c.source, target: c.target, label: '', notes: '',
+    createdAt: now(), updatedAt: now()
+  }, c));
+  wb.links = wb.links.filter(l => l && l.source && l.target).map(l => Object.assign({
+    id: l.id, type: 'link', source: l.source, target: l.target, label: '', weight: 2, notes: '',
+    createdAt: now(), updatedAt: now()
+  }, l));
+  return wb;
+}
+
+function exportWorkbook(state) {
+  const payload = { version: STORAGE_VERSION, exportedAt: now(), workbook: state };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = slugify(state.workbook.title) + '-' + new Date().toISOString().slice(0, 10) + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importWorkbook(file, onDone) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let migrated = null;
+    try {
+      const parsed = JSON.parse(reader.result);
+      migrated = migrateWorkbook(parsed);
+    } catch (e) { migrated = null; }
+    if (!migrated) { onDone(false); return; } // reject malformed; keep current session
+    ensurePinnedPage(migrated);
+    onDone(true, migrated);
+  };
+  reader.onerror = () => onDone(false);
+  reader.readAsText(file);
+}
+
+/* ============================================================
+   AUTOMATIC BACKUPS — rolling snapshots in LocalStorage
+   ============================================================ */
+function readBackups() {
+  try { return JSON.parse(localStorage.getItem(BACKUP_KEY) || '[]'); }
+  catch (e) { return []; }
+}
+function writeBackups(list) {
+  try { localStorage.setItem(BACKUP_KEY, JSON.stringify(list)); return true; }
+  catch (e) {
+    // storage full — drop oldest and retry once
+    if (list.length > 1) { list.shift(); return writeBackups(list); }
+    return false;
+  }
+}
+let lastBackupAt = 0;
+function maybeBackup(force) {
+  const t = now();
+  if (!force && t - lastBackupAt < BACKUP_INTERVAL_MS) return;
+  lastBackupAt = t;
+  const list = readBackups();
+  const snapshot = {
+    at: t,
+    pages: state.pages.length,
+    artifacts: state.artifacts.length,
+    payload: { version: STORAGE_VERSION, exportedAt: t, workbook: state }
+  };
+  list.push(snapshot);
+  while (list.length > MAX_BACKUPS) list.shift();
+  writeBackups(list);
+}
+function restoreBackup(index, onDone) {
+  const list = readBackups();
+  const b = list[index];
+  if (!b) { onDone(false); return; }
+  const migrated = migrateWorkbook(b.payload);
+  if (!migrated) { onDone(false); return; }
+  ensurePinnedPage(migrated);
+  onDone(true, migrated);
+}
+
+/* ============================================================
+   AUTOMATIC FILE EXPORT — optional periodic download
+   ============================================================ */
+let autoExportTimer = null;
+function startAutoExport() {
+  stopAutoExport();
+  autoExportTimer = setInterval(() => {
+    if (!state.preferences.autoExport) return;
+    // only export if something changed since last auto-export
+    if (state.workbook.updatedAt <= (state.preferences.autoExportAt || 0)) return;
+    state.preferences.autoExportAt = now();
+    exportWorkbook(state, { silent: true });
+    toast('Auto-exported workbook backup');
+  }, AUTO_EXPORT_INTERVAL_MS);
+}
+function stopAutoExport() {
+  if (autoExportTimer) { clearInterval(autoExportTimer); autoExportTimer = null; }
+}
+
+/* ============================================================
+   RENDER — every pane is a projection of state
+   ============================================================ */
+let state = loadWorkbook() || createWorkbook();
+
+function cacheEls() {
+  el.pageList = $('#pageList');
+  el.pageTitle = $('#pageTitle');
+  el.pageMeta = $('#pageMeta');
+  el.editor = $('#editor');
+  el.inspectorBody = $('#inspectorBody');
+  el.saveDot = $('#saveDot');
+  el.saveState = $('#saveState');
+  el.pageCountStat = $('#pageCountStat');
+  el.currentPageStat = $('#currentPageStat');
+  el.searchInput = $('#searchInput');
+  el.template = $('#page-item-template');
+  el.markBtn = $('#markArtifactBtn');
+  el.autosaveStat = $('#autosaveStat');
+  el.dropVeil = $('#dropVeil');
+  // Phase 4 model space
+  el.modelSpace = $('#modelSpace');
+  el.modelSvg = $('#modelSvg');
+  el.modelViewport = $('#modelViewport');
+  el.layerConnections = $('#layerConnectionsG');
+  el.layerLinks = $('#layerLinksG');
+  el.layerArtifacts = $('#layerArtifactsG');
+  el.modelEmpty = $('#modelEmpty');
+  el.modelSpaceBtn = $('#modelSpaceBtn');
+}
+
+function render() {
+  ensurePinnedPage(state);
+  renderWorkbookList();
+  renderNotebook();
+  renderModelSpace();
+  renderInspector();
+  renderStatus();
+  syncPanesVisibility();
+}
+
+function matchesQuery(page, q) {
+  if (!q) return true;
+  q = q.toLowerCase();
+  return page.title.toLowerCase().includes(q) || (page.plainText || '').toLowerCase().includes(q);
+}
+
+function renderWorkbookList() {
+  const q = state.ui.searchQuery.trim();
+  const list = el.pageList;
+  list.innerHTML = '';
+  list.className = 'page-list';
+  // Notebook-first search: when a query is active, show unified results
+  // (pages + notebook text ranges + artifacts) instead of the plain page list.
+  if (q) { renderSearchResults(q, list); return; }
+  const pages = state.pages.slice().sort((a, b) => a.order - b.order);
+  if (!pages.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = 'No pages yet.';
+    list.appendChild(li);
+    return;
+  }
+  pages.forEach(p => {
+    const node = el.template.content.firstElementChild.cloneNode(true);
+    node.dataset.pageId = p.id;
+    if (p.id === state.ui.selectedPageId) node.classList.add('selected');
+    node.querySelector('.pin').classList.toggle('hidden', !p.pinned);
+    node.querySelector('.title').textContent = p.title;
+    const count = state.artifacts.filter(a => a.pageId === p.id).length;
+    if (count) node.querySelector('.title').textContent += '  · ' + count;
+    list.appendChild(node);
+  });
+}
+
+/* ---------- notebook-first search (blueprint §15) ---------- */
+function buildSearchIndex() {
+  const idx = [];
+  state.pages.forEach(p => {
+    idx.push({ kind: 'page', pageId: p.id, title: p.title, text: p.title });
+    if (p.plainText) idx.push({ kind: 'text', pageId: p.id, title: p.title, text: p.plainText });
+  });
+  state.artifacts.forEach(a => {
+    const page = state.pages.find(p => p.id === a.pageId);
+    idx.push({ kind: 'artifact', pageId: a.pageId, artifactId: a.id, title: (page ? page.title : ''), text: (a.quote + ' ' + a.notes) });
+  });
+  // relations are searchable by label (blueprint §15)
+  state.connections.forEach(c => {
+    const a = getArtifact(state, c.source);
+    idx.push({ kind: 'connection', pageId: a ? a.pageId : null, relationId: c.id, artifactId: c.source, title: 'Connection ' + c.id, text: (c.label || '') + ' ' + c.source + ' ' + c.target });
+  });
+  state.links.forEach(l => {
+    const a = getArtifact(state, l.source);
+    idx.push({ kind: 'link', pageId: a ? a.pageId : null, relationId: l.id, artifactId: l.source, title: 'Link ' + l.id, text: (l.label || '') + ' ' + l.source + ' ' + l.target });
+  });
+  return idx;
+}
+function snippet(text, q) {
+  const lower = text.toLowerCase();
+  const i = lower.indexOf(q.toLowerCase());
+  if (i < 0) return escapeHtml(text.slice(0, 80));
+  const start = Math.max(0, i - 30);
+  const end = Math.min(text.length, i + q.length + 40);
+  const pre = (start > 0 ? '…' : '') + escapeHtml(text.slice(start, i));
+  const hit = '<mark>' + escapeHtml(text.slice(i, i + q.length)) + '</mark>';
+  const post = escapeHtml(text.slice(i + q.length, end)) + (end < text.length ? '…' : '');
+  return pre + hit + post;
+}
+function renderSearchResults(q, list) {
+  list.className = 'results';
+  const ql = q.toLowerCase();
+  const results = buildSearchIndex().filter(r => r.text.toLowerCase().includes(ql));
+  if (!results.length) {
+    const li = document.createElement('li');
+    li.className = 'empty-hint';
+    li.textContent = 'No matches.';
+    list.appendChild(li);
+    return;
+  }
+  const kindLabel = { page: 'Page', text: 'Notebook text', artifact: 'Artifact', connection: 'Connection', link: 'Link' };
+  results.slice(0, 60).forEach(r => {
+    const li = document.createElement('li');
+    li.className = 'result-item';
+    if (r.pageId) li.dataset.pageId = r.pageId;
+    if (r.artifactId) li.dataset.artifactId = r.artifactId;
+    if (r.relationId) li.dataset.relationId = r.relationId;
+    li.dataset.query = q;
+    const tag = kindLabel[r.kind] + (r.relationId ? ' · ' + r.relationId : (r.artifactId ? ' · ' + r.artifactId : ''));
+    li.innerHTML =
+      '<div class="r-kind">' + tag + '</div>' +
+      '<div class="r-title">' + escapeHtml(r.title || 'Untitled') + '</div>' +
+      '<div class="r-snippet">' + snippet(r.text, q) + '</div>';
+    list.appendChild(li);
+  });
+}
+
+let editorDirty = false;
+function renderNotebook() {
+  const p = getSelectedPage(state);
+  if (!p) return;
+  document.body.classList.toggle('page-locked', !!p.locked);
+  // Title
+  if (document.activeElement !== el.pageTitle) el.pageTitle.value = p.title;
+  el.pageTitle.readOnly = !!p.locked;
+  // Editor content — only reset innerHTML when switching pages (avoid caret jumps while typing)
+  if (el.editor.dataset.pageId !== p.id) {
+    el.editor.innerHTML = p.html || '<p></p>';
+    el.editor.dataset.pageId = p.id;
+    editorDirty = false;
+  }
+  el.editor.setAttribute('contenteditable', p.locked ? 'false' : 'true');
+  // Meta
+  const artCount = state.artifacts.filter(a => a.pageId === p.id).length;
+  el.pageMeta.innerHTML =
+    '<span>' + (p.kind === 'continuity' ? 'Continuity page' : 'Page') + '</span>' +
+    '<span>Updated ' + fmtDate(p.updatedAt) + '</span>' +
+    '<span>' + artCount + ' artifact' + (artCount === 1 ? '' : 's') + '</span>';
+  // reflect current artifact selection on live marks
+  highlightSelectedMark();
+}
+
+function highlightSelectedMark() {
+  const sel = state.ui.selectedArtifactId;
+  // collect the ids of artifacts related to the selected one (respecting layer visibility)
+  const related = new Set();
+  if (sel) {
+    const rels = relationsForArtifact(state, sel);
+    if (state.ui.layers.connections) rels.connections.forEach(c => related.add(relationOther(c, sel)));
+    if (state.ui.layers.links) rels.links.forEach(l => related.add(relationOther(l, sel)));
+  }
+  el.editor.querySelectorAll('.artifact-mark').forEach(m => {
+    const id = m.dataset.artifactId;
+    m.classList.toggle('selected', id === sel);
+    m.classList.toggle('related', related.has(id));
+  });
+}
+
+/* ============================================================
+   MODEL SPACE (Phase 4) — SVG projection of notebook state
+   Every visible object traces to notebook-originated artifacts
+   and their Phase-3 relations. Never a source of truth.
+   ============================================================ */
+const SVGNS = 'http://www.w3.org/2000/svg';
+const NODE_R = 26;           // artifact circle radius (world units)
+const LAYOUT_RADIUS = 190;   // ring radius for auto-layout
+
+function svgEl(name, attrs) {
+  const e = document.createElementNS(SVGNS, name);
+  if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+/* True when an artifact has never been placed (still at origin). */
+function needsLayout(a) {
+  return !a.coordinates || (a.coordinates.x === 0 && a.coordinates.y === 0);
+}
+
+/* Assign coordinates to any artifacts still at origin. Deterministic ring
+   layout centered on (0,0) in world space; already-placed nodes untouched. */
+function assignCoordinates(force) {
+  const arts = state.artifacts;
+  const unplaced = force ? arts : arts.filter(needsLayout);
+  if (!unplaced.length) return false;
+  const total = force ? arts.length : arts.length; // spread across full set for even ring
+  let idx = 0;
+  // when forcing, lay out everything on concentric rings; otherwise append to ring
+  if (force) {
+    arts.forEach((a, i) => {
+      const ring = Math.floor(i / 8);
+      const per = 8;
+      const ang = (i % per) / per * Math.PI * 2 + ring * 0.4;
+      const rad = LAYOUT_RADIUS + ring * 130;
+      a.coordinates = { x: Math.round(Math.cos(ang) * rad), y: Math.round(Math.sin(ang) * rad), region: 'model-space' };
+    });
+    return true;
+  }
+  const base = arts.length - unplaced.length; // how many already placed
+  unplaced.forEach((a) => {
+    const i = base + idx; idx++;
+    const ring = Math.floor(i / 8);
+    const ang = (i % 8) / 8 * Math.PI * 2 + ring * 0.4;
+    const rad = LAYOUT_RADIUS + ring * 130;
+    a.coordinates = { x: Math.round(Math.cos(ang) * rad), y: Math.round(Math.sin(ang) * rad), region: 'model-space' };
+  });
+  return true;
+}
+
+function artCenter(a) {
+  const c = a.coordinates || { x: 0, y: 0 };
+  return { x: c.x, y: c.y };
+}
+
+/* Apply the current pan/zoom to the viewport group. */
+function applyModelTransform() {
+  const m = state.ui.model;
+  if (el.modelViewport) el.modelViewport.setAttribute('transform', `translate(${m.panX} ${m.panY}) scale(${m.zoom})`);
+}
+
+/* Compute a zoom/pan that fits all artifact nodes within the SVG viewport. */
+function fitModelToView() {
+  const w = el.modelSvg.clientWidth, h = el.modelSvg.clientHeight;
+  if (!w || !h) return;
+  if (!state.artifacts.length) { state.ui.model = { zoom: 1, panX: w / 2, panY: h / 2 }; applyModelTransform(); return; }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  state.artifacts.forEach(a => {
+    const c = artCenter(a);
+    minX = Math.min(minX, c.x - NODE_R); maxX = Math.max(maxX, c.x + NODE_R);
+    minY = Math.min(minY, c.y - NODE_R); maxY = Math.max(maxY, c.y + NODE_R);
+  });
+  const pad = 70; // room for labels
+  const bw = (maxX - minX) + pad * 2, bh = (maxY - minY) + pad * 2;
+  const zoom = Math.max(0.3, Math.min(1.6, Math.min(w / bw, h / bh)));
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  state.ui.model = { zoom, panX: w / 2 - cx * zoom, panY: h / 2 - cy * zoom };
+  applyModelTransform();
+}
+
+function renderModelSpace() {
+  document.body.classList.toggle('model-open', !!state.ui.modelSpace);
+  if (el.modelSpaceBtn) {
+    el.modelSpaceBtn.classList.toggle('active', !!state.ui.modelSpace);
+    el.modelSpaceBtn.setAttribute('aria-pressed', String(!!state.ui.modelSpace));
+  }
+  if (!state.ui.modelSpace) return; // don't rebuild SVG while hidden
+
+  // ensure every artifact has a coordinate (auto-layout new ones)
+  if (assignCoordinates(false)) scheduleSave();
+
+  // first-open framing: fit all nodes into view (only when never positioned).
+  // clientWidth may be 0 on the render pass that reveals the pane, so defer to next frame.
+  const m = state.ui.model;
+  const firstOpen = m.panX === 0 && m.panY === 0;
+
+  const sel = state.ui.selectedArtifactId;
+  const layers = state.ui.layers;
+  const related = new Set();
+  if (sel) {
+    const rels = relationsForArtifact(state, sel);
+    if (layers.connections) rels.connections.forEach(c => related.add(relationOther(c, sel)));
+    if (layers.links) rels.links.forEach(l => related.add(relationOther(l, sel)));
+  }
+
+  // clear layers
+  el.layerConnections.textContent = '';
+  el.layerLinks.textContent = '';
+  el.layerArtifacts.textContent = '';
+
+  const byId = {}; state.artifacts.forEach(a => byId[a.id] = a);
+
+  // EDGES: connections (solid lines) then links (dashed curves)
+  const drawEdge = (rel, isLink) => {
+    const s = byId[rel.source], t = byId[rel.target];
+    if (!s || !t) return; // traceability: only draw edges whose endpoints exist
+    const p1 = artCenter(s), p2 = artCenter(t);
+    const relevant = sel && (rel.source === sel || rel.target === sel);
+    const muted = sel && !relevant ? ' muted' : '';
+    let edge, lx, ly;
+    if (isLink) {
+      // curved: quadratic with perpendicular control-point offset
+      const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const off = Math.min(60, len * 0.22);
+      const cx = mx - dy / len * off, cy = my + dx / len * off;
+      edge = svgEl('path', { d: `M${p1.x} ${p1.y} Q${cx} ${cy} ${p2.x} ${p2.y}`, class: 'model-edge is-link' + muted });
+      lx = cx; ly = cy;
+    } else {
+      edge = svgEl('line', { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, class: 'model-edge' + muted });
+      lx = (p1.x + p2.x) / 2; ly = (p1.y + p2.y) / 2;
+    }
+    edge.dataset.relId = rel.id;
+    (isLink ? el.layerLinks : el.layerConnections).appendChild(edge);
+    if (rel.label) {
+      const lbl = svgEl('text', { x: lx, y: ly - 4, class: 'model-edge-label' + muted, 'text-anchor': 'middle' });
+      lbl.textContent = rel.label;
+      (isLink ? el.layerLinks : el.layerConnections).appendChild(lbl);
+    }
+  };
+  if (layers.connections) state.connections.forEach(c => drawEdge(c, false));
+  if (layers.links) state.links.forEach(l => drawEdge(l, true));
+
+  // NODES: artifacts as circles
+  state.artifacts.forEach(a => {
+    const c = artCenter(a);
+    const isSel = a.id === sel;
+    const isRel = related.has(a.id);
+    const muted = sel && !isSel && !isRel ? ' muted' : '';
+    const g = svgEl('g', {
+      class: 'model-node' + (isSel ? ' selected' : '') + (isRel ? ' related' : '') + muted,
+      transform: `translate(${c.x} ${c.y})`, 'data-artifact-id': a.id, 'data-subtype': a.subtype
+    });
+    g.appendChild(svgEl('circle', { class: 'node-body', cx: 0, cy: 0, r: NODE_R }));
+    // label = truncated quote
+    const q = (a.quote || '').trim();
+    const label = svgEl('text', { class: 'node-label', x: 0, y: NODE_R + 15, 'text-anchor': 'middle' });
+    label.textContent = q.length > 22 ? q.slice(0, 22) + '…' : (q || a.id);
+    g.appendChild(label);
+    const idt = svgEl('text', { class: 'node-id', x: 0, y: 3.5, 'text-anchor': 'middle' });
+    idt.textContent = a.id;
+    g.appendChild(idt);
+    el.layerArtifacts.appendChild(g);
+  });
+
+  el.modelEmpty.hidden = state.artifacts.length > 0;
+  applyModelTransform();
+  if (firstOpen) {
+    if (el.modelSvg.clientWidth) fitModelToView();
+    else requestAnimationFrame(() => { if (state.ui.modelSpace) fitModelToView(); });
+  }
+}
+
+function toggleModelSpace() {
+  state.ui.modelSpace = !state.ui.modelSpace;
+  // close mobile drawers when entering model space
+  if (state.ui.modelSpace) document.body.classList.remove('drawer-workbook');
+  commit();
+}
+
+/* Convert a screen (client) point to model-world coordinates. */
+function screenToWorld(clientX, clientY) {
+  const rect = el.modelSvg.getBoundingClientRect();
+  const m = state.ui.model;
+  return {
+    x: (clientX - rect.left - m.panX) / m.zoom,
+    y: (clientY - rect.top - m.panY) / m.zoom
+  };
+}
+
+function setZoom(nextZoom, pivotClientX, pivotClientY) {
+  const m = state.ui.model;
+  const z = Math.max(0.3, Math.min(3, nextZoom));
+  const rect = el.modelSvg.getBoundingClientRect();
+  // keep the pivot point stationary in world space
+  const px = (pivotClientX != null ? pivotClientX : rect.left + rect.width / 2) - rect.left;
+  const py = (pivotClientY != null ? pivotClientY : rect.top + rect.height / 2) - rect.top;
+  const wx = (px - m.panX) / m.zoom, wy = (py - m.panY) / m.zoom;
+  m.zoom = z;
+  m.panX = px - wx * z;
+  m.panY = py - wy * z;
+  applyModelTransform();
+  scheduleSave();
+}
+
+function bindModelSpace() {
+  el.modelSpaceBtn.addEventListener('click', toggleModelSpace);
+
+  // zoom buttons
+  $('#modelZoomIn').addEventListener('click', () => setZoom(state.ui.model.zoom * 1.2));
+  $('#modelZoomOut').addEventListener('click', () => setZoom(state.ui.model.zoom / 1.2));
+  $('#modelZoomReset').addEventListener('click', () => {
+    fitModelToView(); scheduleSave();
+  });
+  $('#modelAutoLayout').addEventListener('click', () => {
+    assignCoordinates(true);
+    commit();
+    fitModelToView(); scheduleSave();
+    toast('Auto-layout applied');
+  });
+
+  // wheel zoom
+  el.modelSvg.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    setZoom(state.ui.model.zoom * factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // pointer interactions: node drag OR canvas pan
+  let mode = null;        // 'drag' | 'pan'
+  let dragArt = null;     // artifact being dragged
+  let dragNodeEl = null;
+  let moved = false;
+  let start = { x: 0, y: 0 };
+  let panStart = { x: 0, y: 0 };
+  let worldStart = { x: 0, y: 0 };
+
+  el.modelSvg.addEventListener('pointerdown', (e) => {
+    const nodeEl = e.target.closest('.model-node');
+    moved = false;
+    start = { x: e.clientX, y: e.clientY };
+    if (nodeEl) {
+      mode = 'drag';
+      dragNodeEl = nodeEl;
+      dragArt = getArtifact(state, nodeEl.dataset.artifactId);
+      worldStart = screenToWorld(e.clientX, e.clientY);
+      nodeEl.classList.add('dragging');
+    } else {
+      mode = 'pan';
+      panStart = { x: state.ui.model.panX, y: state.ui.model.panY };
+      el.modelSvg.classList.add('panning');
+    }
+    el.modelSvg.setPointerCapture(e.pointerId);
+  });
+
+  el.modelSvg.addEventListener('pointermove', (e) => {
+    if (!mode) return;
+    const dx = e.clientX - start.x, dy = e.clientY - start.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    if (mode === 'pan') {
+      state.ui.model.panX = panStart.x + dx;
+      state.ui.model.panY = panStart.y + dy;
+      applyModelTransform();
+    } else if (mode === 'drag' && dragArt) {
+      const w = screenToWorld(e.clientX, e.clientY);
+      dragArt.coordinates = {
+        x: Math.round((dragArt.coordinates.x || 0) + (w.x - worldStart.x)),
+        y: Math.round((dragArt.coordinates.y || 0) + (w.y - worldStart.y)),
+        region: 'model-space'
+      };
+      worldStart = w;
+      // live-update node + its edges without full re-render
+      dragNodeEl.setAttribute('transform', `translate(${dragArt.coordinates.x} ${dragArt.coordinates.y})`);
+      updateEdgesFor(dragArt.id);
+    }
+  });
+
+  const endPointer = (e) => {
+    if (!mode) return;
+    const wasMode = mode, wasMoved = moved;
+    if (dragNodeEl) dragNodeEl.classList.remove('dragging');
+    el.modelSvg.classList.remove('panning');
+    try { el.modelSvg.releasePointerCapture(e.pointerId); } catch (_) {}
+    if (wasMode === 'drag' && !wasMoved && dragArt) {
+      // treat as a click -> select artifact (cross-highlight + inspector)
+      selectArtifact(dragArt.id);
+    } else if (wasMode === 'drag' && wasMoved) {
+      // persist new coordinate; re-render to refresh muting relationships
+      commit();
+    } else if (wasMode === 'pan' && wasMoved) {
+      scheduleSave();
+    }
+    mode = null; dragArt = null; dragNodeEl = null;
+  };
+  el.modelSvg.addEventListener('pointerup', endPointer);
+  el.modelSvg.addEventListener('pointercancel', endPointer);
+}
+
+/* During a drag, cheaply reposition edges touching the dragged artifact. */
+function updateEdgesFor(artId) {
+  const byId = {}; state.artifacts.forEach(a => byId[a.id] = a);
+  const touch = (rel) => rel.source === artId || rel.target === artId;
+  const redrawInto = () => { /* handled by re-query below */ };
+  redrawInto();
+  const layers = [el.layerConnections, el.layerLinks];
+  // connections (lines)
+  state.connections.forEach(c => {
+    if (!touch(c)) return;
+    const s = byId[c.source], t = byId[c.target]; if (!s || !t) return;
+    const line = el.layerConnections.querySelector(`line[data-rel-id="${c.id}"]`);
+    if (line) { line.setAttribute('x1', s.coordinates.x); line.setAttribute('y1', s.coordinates.y); line.setAttribute('x2', t.coordinates.x); line.setAttribute('y2', t.coordinates.y); }
+    const lbl = el.layerConnections.querySelector(`text[data-rel-id="${c.id}"]`);
+    if (lbl) { lbl.setAttribute('x', (s.coordinates.x + t.coordinates.x) / 2); lbl.setAttribute('y', (s.coordinates.y + t.coordinates.y) / 2 - 4); }
+  });
+  // links (curved paths)
+  state.links.forEach(l => {
+    if (!touch(l)) return;
+    const s = byId[l.source], t = byId[l.target]; if (!s || !t) return;
+    const p1 = s.coordinates, p2 = t.coordinates;
+    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+    const ddx = p2.x - p1.x, ddy = p2.y - p1.y; const len = Math.hypot(ddx, ddy) || 1;
+    const off = Math.min(60, len * 0.22);
+    const cx = mx - ddy / len * off, cy = my + ddx / len * off;
+    const path = el.layerLinks.querySelector(`path[data-rel-id="${l.id}"]`);
+    if (path) path.setAttribute('d', `M${p1.x} ${p1.y} Q${cx} ${cy} ${p2.x} ${p2.y}`);
+    const lbl = el.layerLinks.querySelector(`text[data-rel-id="${l.id}"]`);
+    if (lbl) { lbl.setAttribute('x', cx); lbl.setAttribute('y', cy - 4); }
+  });
+}
+
+const SUBTYPES = ['claim', 'evidence', 'question', 'term'];
+
+function renderInspector() {
+  const b = el.inspectorBody;
+  const selArt = state.ui.selectedArtifactId ? getArtifact(state, state.ui.selectedArtifactId) : null;
+  if (selArt) { renderArtifactInspector(b, selArt); return; }
+  renderContextInspector(b);
+}
+
+/* Artifact selected (blueprint §14) */
+function renderArtifactInspector(b, a) {
+  const page = state.pages.find(p => p.id === a.pageId);
+  b.innerHTML = `
+    <div class="insp-section">
+      <p class="insp-label">Artifact</p>
+      <div class="insp-field"><span class="k">ID</span><span class="v">${a.id}</span></div>
+      <div class="insp-field"><span class="k">Type</span><span class="v">artifact / ${escapeHtml(a.subtype)}</span></div>
+      <div class="insp-field"><span class="k">Source page</span><span class="v">${escapeHtml(page ? page.title : '—')}</span></div>
+      <div class="insp-field"><span class="k">Created</span><span class="v">${fmtDate(a.createdAt)}</span></div>
+    </div>
+    <div class="insp-section">
+      <p class="insp-label">Subtype</p>
+      <div class="type-picker" id="artSubtype">
+        ${SUBTYPES.map(s => `<button class="type-opt ${s === a.subtype ? 'active' : ''}" data-sub="${s}">${s}</button>`).join('')}
+      </div>
+    </div>
+    <div class="insp-section">
+      <p class="insp-label">Quote</p>
+      <div class="quote-preview">${escapeHtml(a.quote) || '<em>empty</em>'}</div>
+    </div>
+    <div class="insp-section">
+      <p class="insp-label">Notes</p>
+      <textarea id="artNotes" placeholder="Add reasoning, references, context…">${escapeHtml(a.notes)}</textarea>
+    </div>
+    ${relationsSectionHTML(a)}
+    <div class="insp-section">
+      <p class="insp-label">Coordinates</p>
+      <div class="insp-field"><span class="k">Region</span><span class="v">${escapeHtml(a.coordinates.region)}</span></div>
+      <div class="insp-field"><span class="k">x, y</span><span class="v">${a.coordinates.x}, ${a.coordinates.y}</span></div>
+      <div class="insp-placeholder-note">Spatial placement is assigned in Phase 4 (model space).</div>
+    </div>
+    <div class="insp-section">
+      <p class="insp-label">Actions</p>
+      <div class="insp-actions">
+        <button class="btn" data-act="relate">Relate…</button>
+        <button class="btn" data-act="focus-artifact">Focus in notebook</button>
+        <button class="btn" data-act="deselect">Back to page</button>
+        <button class="btn" data-act="delete-artifact">Delete artifact</button>
+      </div>
+    </div>
+  `;
+  // subtype change
+  b.querySelectorAll('#artSubtype .type-opt').forEach(btn => btn.addEventListener('click', () => {
+    a.subtype = btn.dataset.sub; a.updatedAt = now();
+    const mark = el.editor.querySelector('[data-artifact-id="' + a.id + '"]');
+    if (mark) mark.dataset.artifactType = a.subtype;
+    syncEditorToState();
+    touch(state); commit();
+  }));
+  // notes edit (debounced save, no full re-render to keep focus)
+  const notes = b.querySelector('#artNotes');
+  notes.addEventListener('input', () => { a.notes = notes.value; a.updatedAt = now(); touch(state); scheduleSave(false); });
+  // actions
+  b.querySelectorAll('.insp-actions [data-act]').forEach(btn => btn.addEventListener('click', () => {
+    const act = btn.dataset.act;
+    if (act === 'relate') promptRelate(a);
+    if (act === 'focus-artifact') focusArtifact(a.id);
+    if (act === 'deselect') { state.ui.selectedArtifactId = null; state.ui.selectedRelationId = null; commit(); }
+    if (act === 'delete-artifact') {
+      const rels = relationsForArtifact(state, a.id);
+      const relCount = rels.connections.length + rels.links.length;
+      const extra = relCount ? ' This also removes ' + relCount + ' relation' + (relCount === 1 ? '' : 's') + '.' : '';
+      confirmDialog('Delete artifact?', 'This removes ' + a.id + ' and unwraps its highlight. The underlying notebook text is preserved.' + extra, 'Delete',
+        () => { deleteArtifact(state, a.id); commit({ immediate: true }); toast('Artifact deleted'); });
+    }
+  }));
+  // relation rows: select (jump to other end) / delete
+  b.querySelectorAll('.relation-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.rel-del')) {
+        const id = row.dataset.relId;
+        deleteRelation(state, id); commit({ immediate: true }); toast('Relation removed');
+        return;
+      }
+      // navigate to the other endpoint, keep the relation selected
+      const other = row.dataset.other;
+      if (other && getArtifact(state, other)) {
+        const oa = getArtifact(state, other);
+        state.ui.selectedPageId = oa.pageId;
+        state.ui.selectedArtifactId = other;
+        state.ui.selectedRelationId = row.dataset.relId;
+        commit();
+        scrollToArtifact(other);
+      }
+    });
+  });
+}
+
+/* Relations subsection for the artifact inspector (structural vs conceptual, visibly distinct) */
+function relationsSectionHTML(a) {
+  const rels = relationsForArtifact(state, a.id);
+  const layers = state.ui.layers;
+  const row = (rel, kind) => {
+    const other = relationOther(rel, a.id);
+    const dir = rel.source === a.id ? '→' : '←';
+    const sel = rel.id === state.ui.selectedRelationId ? ' selected' : '';
+    const glyph = kind === 'connection'
+      ? '<svg class="rel-glyph" viewBox="0 0 28 12" aria-hidden="true"><line x1="2" y1="6" x2="26" y2="6"/></svg>'
+      : '<svg class="rel-glyph dashed" viewBox="0 0 28 12" aria-hidden="true"><path d="M2 6 Q14 -2 26 6"/></svg>';
+    const wt = kind === 'link' ? ('<span class="rel-weight" title="strength">' + '●'.repeat(rel.weight || 1) + '</span>') : '';
+    return '<li class="relation-row rel-' + kind + sel + '" data-rel-id="' + rel.id + '" data-other="' + other + '">' +
+      glyph +
+      '<span class="rel-body">' +
+        '<span class="rel-label">' + (rel.label ? escapeHtml(rel.label) : '<em>' + (kind === 'connection' ? 'structural' : 'conceptual') + '</em>') + '</span>' +
+        '<span class="rel-end">' + dir + ' ' + escapeHtml(artifactLabel(state, other)) + '</span>' +
+      '</span>' + wt +
+      '<button class="rel-del" title="Remove relation" aria-label="Remove relation">×</button>' +
+    '</li>';
+  };
+  const conns = layers.connections ? rels.connections.map(c => row(c, 'connection')).join('') : '';
+  const links = layers.links ? rels.links.map(l => row(l, 'link')).join('') : '';
+  const total = rels.connections.length + rels.links.length;
+  const hiddenNote = (!layers.connections && rels.connections.length) || (!layers.links && rels.links.length)
+    ? '<div class="insp-placeholder-note">Some relations are hidden by layer toggles.</div>' : '';
+  return '<div class="insp-section">' +
+    '<p class="insp-label">Relations' + (total ? ' · ' + total : '') + '</p>' +
+    (total ? ('<ul class="relation-list">' + conns + links + '</ul>') : '<div class="insp-placeholder-note">No relations yet. Use “Relate…” to connect this to another artifact.</div>') +
+    hiddenNote +
+    '</div>';
+}
+
+/* No/Page selected (blueprint §14) + automatic-backup panel */
+function renderContextInspector(b) {
+  const p = getSelectedPage(state);
+  const words = p ? (p.plainText || '').trim().split(/\s+/).filter(Boolean).length : 0;
+  const pageArtifacts = p ? state.artifacts.filter(a => a.pageId === p.id) : [];
+  const backups = readBackups();
+  b.innerHTML = `
+    <div class="insp-section">
+      <p class="insp-label">Workbook</p>
+      <div class="insp-field"><span class="k">Title</span><span class="v">${escapeHtml(state.workbook.title)}</span></div>
+      <div class="insp-field"><span class="k">Pages</span><span class="v">${state.pages.length}</span></div>
+      <div class="insp-field"><span class="k">Artifacts</span><span class="v">${state.artifacts.length}</span></div>
+      <div class="insp-field"><span class="k">Connections</span><span class="v">${state.connections.length}</span></div>
+      <div class="insp-field"><span class="k">Links</span><span class="v">${state.links.length}</span></div>
+      <div class="insp-field"><span class="k">Updated</span><span class="v">${fmtDate(state.workbook.updatedAt)}</span></div>
+    </div>
+    <div class="insp-section">
+      <p class="insp-label">Relational layers</p>
+      <div class="toggle-row">
+        <span><svg class="rel-glyph inline" viewBox="0 0 28 12" aria-hidden="true"><line x1="2" y1="6" x2="26" y2="6"/></svg> Connections <span class="muted">(structural)</span></span>
+        <label class="switch"><input type="checkbox" id="layerConnections" ${state.ui.layers.connections ? 'checked' : ''}/><span class="track"></span></label>
+      </div>
+      <div class="toggle-row">
+        <span><svg class="rel-glyph inline dashed" viewBox="0 0 28 12" aria-hidden="true"><path d="M2 6 Q14 -2 26 6"/></svg> Links <span class="muted">(conceptual)</span></span>
+        <label class="switch"><input type="checkbox" id="layerLinks" ${state.ui.layers.links ? 'checked' : ''}/><span class="track"></span></label>
+      </div>
+      <div class="insp-placeholder-note">Toggles hide relation rows in the inspector and edges in the model space.</div>
+    </div>
+    ${p ? `
+    <div class="insp-section">
+      <p class="insp-label">Current page</p>
+      <div class="insp-field"><span class="k">Type</span><span class="v">${p.kind === 'continuity' ? 'Continuity' : 'Page'}</span></div>
+      <div class="insp-field"><span class="k">Title</span><span class="v">${escapeHtml(p.title)}</span></div>
+      <div class="insp-field"><span class="k">Created</span><span class="v">${fmtDate(p.createdAt)}</span></div>
+      <div class="insp-field"><span class="k">Words</span><span class="v">${words}</span></div>
+      <div class="insp-field"><span class="k">Artifacts</span><span class="v">${pageArtifacts.length}</span></div>
+    </div>
+    ${pageArtifacts.length ? `
+    <div class="insp-section">
+      <p class="insp-label">Artifacts on this page</p>
+      <div class="artifact-chips">
+        ${pageArtifacts.map(a => `<div class="artifact-chip" data-artifact-id="${a.id}"><span class="chip-id">${a.id}</span><span class="chip-quote">${escapeHtml(a.quote)}</span></div>`).join('')}
+      </div>
+    </div>` : ''}
+    <div class="insp-section">
+      <p class="insp-label">Actions</p>
+      <div class="insp-actions">
+        <button class="btn" data-act="duplicate">Duplicate</button>
+        <button class="btn" data-act="delete">${p.pinned ? 'Archive\u2026' : 'Delete'}</button>
+      </div>
+    </div>` : ''}
+    <div class="insp-section">
+      <p class="insp-label">Automatic backups</p>
+      <div class="toggle-row">
+        <span>Periodic file auto-export</span>
+        <label class="switch"><input type="checkbox" id="autoExportToggle" ${state.preferences.autoExport ? 'checked' : ''}/><span class="track"></span></label>
+      </div>
+      <div class="insp-placeholder-note">Rolling snapshots are kept locally (last ${MAX_BACKUPS}). Auto-export also downloads a .json every few minutes when enabled.</div>
+      <ul class="backup-list" id="backupList">
+        ${backups.length ? backups.slice().reverse().map((bk, ri) => {
+          const realIndex = backups.length - 1 - ri;
+          return `<li class="backup-item"><span><span class="when">${fmtDate(bk.at)}</span> <span class="meta">· ${bk.pages}p / ${bk.artifacts}a</span></span><button class="mini restore" data-idx="${realIndex}">Restore</button></li>`;
+        }).join('') : '<li class="empty-hint" style="padding:6px 0">No snapshots yet — they appear as you work.</li>'}
+      </ul>
+    </div>
+    <div class="insp-section">
+      <div class="continuity-reminder">The pinned continuity page anchors this workbook and cannot be deleted.</div>
+    </div>
+  `;
+  // page actions
+  b.querySelectorAll('.insp-actions [data-act]').forEach(btn => btn.addEventListener('click', () => {
+    const act = btn.dataset.act;
+    if (act === 'duplicate') { duplicatePage(state, state.ui.selectedPageId); commit(); toast('Page duplicated'); }
+    if (act === 'delete') attemptDelete(state.ui.selectedPageId);
+  }));
+  // artifact chips -> select
+  b.querySelectorAll('.artifact-chip').forEach(chip => chip.addEventListener('click', () => selectArtifact(chip.dataset.artifactId)));
+  // relational layer toggles
+  const lc = b.querySelector('#layerConnections');
+  if (lc) lc.addEventListener('change', () => { state.ui.layers.connections = lc.checked; commit(); });
+  const ll = b.querySelector('#layerLinks');
+  if (ll) ll.addEventListener('change', () => { state.ui.layers.links = ll.checked; commit(); });
+  // auto-export toggle
+  const tog = b.querySelector('#autoExportToggle');
+  if (tog) tog.addEventListener('change', () => {
+    state.preferences.autoExport = tog.checked;
+    if (tog.checked) { state.preferences.autoExportAt = now(); startAutoExport(); toast('Auto-export on'); }
+    else { stopAutoExport(); toast('Auto-export off'); }
+    scheduleSave(true);
+  });
+  // restore buttons
+  b.querySelectorAll('.restore').forEach(btn => btn.addEventListener('click', () => {
+    const idx = parseInt(btn.dataset.idx, 10);
+    confirmDialog('Restore this snapshot?', 'Your current workbook will be replaced by the backup from ' + fmtDate(readBackups()[idx].at) + '. A fresh snapshot of the current state is taken first, so this is reversible.', 'Restore',
+      () => { maybeBackup(true); restoreBackup(idx, (ok, restored) => {
+        if (!ok) { toast('Restore failed'); return; }
+        state = restored; state.ui.selectedArtifactId = null;
+        el.editor.dataset.pageId = '';
+        commit({ immediate: true }); toast('Snapshot restored');
+      }); });
+  }));
+}
+
+function renderStatus() {
+  el.pageCountStat.textContent = state.pages.length + ' page' + (state.pages.length === 1 ? '' : 's');
+  const p = getSelectedPage(state);
+  el.currentPageStat.textContent = p ? p.title : 'No page';
+  if (el.autosaveStat) {
+    const n = readBackups().length;
+    const ae = state.preferences.autoExport ? ' · auto-export on' : '';
+    el.autosaveStat.textContent = 'Auto-backup: ' + n + '/' + MAX_BACKUPS + ae;
+  }
+}
+
+function syncPanesVisibility() {
+  document.body.classList.toggle('hide-workbook', !state.ui.showWorkbook);
+  document.body.classList.toggle('hide-inspector', !state.ui.showInspector);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/* ============================================================
+   COMMIT = render + debounced save (with save-state feedback)
+   ============================================================ */
+let saveTimer = null;
+function setSaveState(kind) {
+  el.saveDot.className = 'dot' + (kind === 'saved' ? ' saved' : kind === 'saving' ? ' saving' : '');
+  el.saveState.textContent = kind === 'saved' ? 'All changes saved' : kind === 'saving' ? 'Saving\u2026' : 'Ready';
+}
+function commit(opts = {}) {
+  render();
+  scheduleSave(opts.immediate);
+}
+function scheduleSave(immediate) {
+  setSaveState('saving');
+  clearTimeout(saveTimer);
+  const doSave = () => { saveWorkbook(state); setSaveState('saved'); };
+  if (immediate) { doSave(); }
+  else { saveTimer = setTimeout(doSave, 600); }
+}
+
+/* ============================================================
+   EDITOR — contenteditable, selection capture, sanitized paste
+   (no execCommand for core logic)
+   ============================================================ */
+let currentSelection = null; // Phase 2 will use this for artifact creation
+
+function bindEditor() {
+  const ed = el.editor;
+
+  // input -> sync into state, debounced save
+  ed.addEventListener('input', () => {
+    const p = getSelectedPage(state);
+    if (!p || p.locked) return;
+    syncEditorToState();
+    // update meta + status without resetting editor DOM
+    renderStatus();
+    const metaSpan = el.pageMeta.querySelector('span:nth-child(2)');
+    if (metaSpan) metaSpan.textContent = 'Updated ' + fmtDate(p.updatedAt);
+    scheduleSave(false); // debounced after editor input (does NOT re-render editor)
+  });
+
+  // capture selection snapshot + enable/disable Mark button
+  document.addEventListener('selectionchange', () => {
+    const sel = window.getSelection();
+    const p = getSelectedPage(state);
+    if (sel && sel.rangeCount && ed.contains(sel.anchorNode) && ed.contains(sel.focusNode)) {
+      const text = sel.toString();
+      currentSelection = text.trim() ? { text, range: sel.getRangeAt(0).cloneRange() } : null;
+    } else {
+      currentSelection = null;
+    }
+    // a selection can become an artifact only if it's non-empty, on an unlocked page,
+    // and does not already sit inside an artifact mark (no overlapping wrappers - blueprint §9)
+    const insideMark = currentSelection && selectionTouchesMark(currentSelection.range);
+    el.markBtn.disabled = !(currentSelection && p && !p.locked && !insideMark);
+  });
+
+  // click an existing artifact mark -> select it
+  ed.addEventListener('click', (e) => {
+    const mark = e.target.closest('.artifact-mark');
+    if (mark && mark.dataset.artifactId) { selectArtifact(mark.dataset.artifactId); }
+  });
+
+  // sanitize paste -> plain text + paragraph breaks (no arbitrary embedded HTML)
+  ed.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain') || '';
+    const paras = text.split(/\n{2,}/).map(block => {
+      const safe = escapeHtml(block).replace(/\n/g, '<br>');
+      return '<p>' + (safe || '') + '</p>';
+    }).join('');
+    // insert at caret using Range API (avoids deprecated execCommand)
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const tmp = document.createElement('div');
+    tmp.innerHTML = paras || '<p></p>';
+    const frag = document.createDocumentFragment();
+    let lastNode;
+    while (tmp.firstChild) { lastNode = frag.appendChild(tmp.firstChild); }
+    range.insertNode(frag);
+    if (lastNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+      sel.removeAllRanges(); sel.addRange(range);
+    }
+    ed.dispatchEvent(new Event('input'));
+  });
+
+  // ensure there's always at least a paragraph
+  ed.addEventListener('blur', () => {
+    if (!ed.textContent.trim() && !ed.querySelector('img, ul, ol, blockquote')) {
+      if (!ed.innerHTML.trim()) ed.innerHTML = '<p></p>';
+    }
+  });
+}
+
+/* Write the live editor DOM back into the current page state. */
+function syncEditorToState() {
+  const p = getSelectedPage(state);
+  if (!p) return;
+  p.html = el.editor.innerHTML;
+  p.plainText = el.editor.textContent || '';
+  p.updatedAt = now();
+  touch(state);
+}
+
+/* Does a range already intersect an artifact mark? (prevents overlapping wrappers) */
+function selectionTouchesMark(range) {
+  const walk = (node) => {
+    if (!node) return false;
+    if (node.nodeType === 1 && node.classList && node.classList.contains('artifact-mark')) return true;
+    return node.parentElement ? !!node.parentElement.closest('.artifact-mark') : false;
+  };
+  if (walk(range.startContainer) || walk(range.endContainer)) return true;
+  // also check if the range spans a mark entirely
+  const frag = range.cloneContents();
+  return !!frag.querySelector && !!frag.querySelector('.artifact-mark');
+}
+
+/* ---------- artifact creation from the current selection ---------- */
+function serializeRange(range, root) {
+  // record a path from root to the container + offset so it can be inspected/rehydrated
+  const pathOf = (node) => {
+    const path = [];
+    let n = node;
+    while (n && n !== root) {
+      const parent = n.parentNode;
+      if (!parent) break;
+      path.unshift(Array.prototype.indexOf.call(parent.childNodes, n));
+      n = parent;
+    }
+    return path;
+  };
+  return {
+    startPath: pathOf(range.startContainer), startOffset: range.startOffset,
+    endPath: pathOf(range.endContainer), endOffset: range.endOffset
+  };
+}
+
+function createArtifactFromSelection(subtype) {
+  const p = getSelectedPage(state);
+  if (!p || p.locked || !currentSelection) return null;
+  const range = currentSelection.range;
+  if (range.collapsed || !currentSelection.text.trim()) return null;
+  if (selectionTouchesMark(range)) { toast('Selection overlaps an existing artifact'); return null; }
+
+  const artifact = makeArtifact(state, {
+    pageId: p.id,
+    subtype: subtype,
+    quote: currentSelection.text,
+    range: serializeRange(range, el.editor)
+  });
+
+  // Wrap the selection in a semantic span. surroundContents throws if the range
+  // crosses element boundaries; fall back to extract+wrap in that case.
+  const mark = document.createElement('span');
+  mark.className = 'artifact-mark';
+  mark.dataset.artifactId = artifact.id;
+  mark.dataset.artifactType = artifact.subtype;
+  try {
+    range.surroundContents(mark);
+  } catch (err) {
+    const contents = range.extractContents();
+    mark.appendChild(contents);
+    range.insertNode(mark);
+  }
+
+  state.artifacts.push(artifact);
+  p.artifactIds = p.artifactIds || [];
+  p.artifactIds.push(artifact.id);
+  state.ui.selectedArtifactId = artifact.id;
+  syncEditorToState();
+  currentSelection = null;
+  window.getSelection().removeAllRanges();
+  commit({ immediate: true });
+  return artifact;
+}
+
+/* select an artifact: switch to its page, highlight, update inspector */
+function selectArtifact(id) {
+  const a = getArtifact(state, id);
+  if (!a) return;
+  if (state.ui.selectedPageId !== a.pageId) state.ui.selectedPageId = a.pageId;
+  state.ui.selectedArtifactId = id;
+  state.ui.selectedRelationId = null;
+  commit();
+}
+
+/* select a relation: jump to its source artifact + show relation in inspector */
+function selectRelation(id) {
+  const rel = getRelation(state, id);
+  if (!rel) return;
+  const src = getArtifact(state, rel.source);
+  if (src) { state.ui.selectedPageId = src.pageId; state.ui.selectedArtifactId = src.id; }
+  state.ui.selectedRelationId = id;
+  commit();
+  if (src) scrollToArtifact(src.id);
+}
+
+/* focus an artifact: select it, then scroll notebook to it and pulse briefly (blueprint §15) */
+function focusArtifact(id) {
+  selectArtifact(id);
+  scrollToArtifact(id);
+}
+
+/* scroll-and-pulse only, without changing selection state */
+function scrollToArtifact(id) {
+  requestAnimationFrame(() => {
+    const mark = el.editor.querySelector('[data-artifact-id="' + id + '"]');
+    if (!mark) return;
+    mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    mark.classList.add('pulse');
+    setTimeout(() => mark.classList.remove('pulse'), 1400);
+  });
+}
+
+/* prompt for subtype, then create */
+function promptCreateArtifact() {
+  if (!currentSelection || !currentSelection.text.trim()) return;
+  artifactDialog(currentSelection.text, (subtype) => {
+    const a = createArtifactFromSelection(subtype);
+    if (a) { toast('Artifact ' + a.id + ' created'); focusArtifact(a.id); }
+  });
+}
+
+/* ============================================================
+   EVENT WIRING
+   ============================================================ */
+function bindUI() {
+  // New page
+  $('#newPageBtn').addEventListener('click', () => {
+    createPage(state, { title: 'Untitled Page' });
+    state.ui.modelSpace = false; // creating a page is a writing intent — land on the editor
+    commit({ immediate: true });
+    el.pageTitle.focus(); el.pageTitle.select();
+    toast('New page created');
+  });
+
+  // Page title editing
+  el.pageTitle.addEventListener('input', () => {
+    renamePage(state, state.ui.selectedPageId, el.pageTitle.value);
+    renderWorkbookList(); renderStatus();
+    scheduleSave(false);
+  });
+  el.pageTitle.addEventListener('blur', () => commit({ immediate: true }));
+
+  // Workbook list: select / reorder / search-result jump
+  el.pageList.addEventListener('click', (e) => {
+    // search result?
+    const result = e.target.closest('.result-item');
+    if (result) {
+      if (result.dataset.relationId) {
+        selectRelation(result.dataset.relationId);
+      } else if (result.dataset.artifactId) {
+        state.ui.selectedPageId = result.dataset.pageId;
+        selectArtifact(result.dataset.artifactId); focusArtifact(result.dataset.artifactId);
+      } else {
+        state.ui.selectedPageId = result.dataset.pageId;
+        state.ui.selectedArtifactId = null;
+        commit();
+        jumpToText(result.dataset.query);
+      }
+      document.body.classList.remove('drawer-workbook');
+      return;
+    }
+    const item = e.target.closest('.page-item');
+    if (!item) return;
+    const pageId = item.dataset.pageId;
+    if (e.target.classList.contains('up')) { movePage(state, pageId, -1); commit({ immediate: true }); return; }
+    if (e.target.classList.contains('down')) { movePage(state, pageId, +1); commit({ immediate: true }); return; }
+    state.ui.selectedPageId = pageId;
+    state.ui.selectedArtifactId = null; // page selection clears artifact selection
+    state.ui.modelSpace = false; // opening a page returns you to the writing surface
+    document.body.classList.remove('drawer-workbook');
+    commit();
+  });
+  el.pageList.addEventListener('keydown', (e) => {
+    const item = e.target.closest('.page-item');
+    if (item && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      state.ui.selectedPageId = item.dataset.pageId;
+      state.ui.modelSpace = false;
+      commit();
+    }
+  });
+
+  // Search
+  el.searchInput.addEventListener('input', () => {
+    state.ui.searchQuery = el.searchInput.value;
+    renderWorkbookList();
+  });
+
+  // Export / import
+  $('#exportBtn').addEventListener('click', () => { exportWorkbook(state); toast('Workbook exported'); });
+  $('#importBtn').addEventListener('click', () => $('#importFile').click());
+  $('#importFile').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    importWorkbook(file, (ok, imported) => {
+      if (!ok) { toast('Import failed — file was invalid. Session unchanged.'); }
+      else {
+        confirmDialog(
+          'Replace current workbook?',
+          'Importing will replace your current workbook. Export first if you want a backup.',
+          'Import',
+          () => { state = imported; commit({ immediate: true }); toast('Workbook imported'); }
+        );
+      }
+      e.target.value = '';
+    });
+  });
+
+  // Mark artifact (button + Cmd/Ctrl+M)
+  el.markBtn.addEventListener('click', () => promptCreateArtifact());
+
+  // Model space (Phase 4)
+  bindModelSpace();
+
+  // Pane toggles
+  $('#toggleWorkbookBtn').addEventListener('click', () => { state.ui.showWorkbook = !state.ui.showWorkbook; commit(); });
+  $('#toggleInspectorBtn').addEventListener('click', () => { state.ui.showInspector = !state.ui.showInspector; commit(); });
+  // Mobile drawers
+  $('#toggleWorkbookDrawer').addEventListener('click', () => document.body.classList.toggle('drawer-workbook'));
+  $('#toggleInspectorDrawer').addEventListener('click', () => document.body.classList.toggle('drawer-inspector'));
+
+  // Save + backup before unload
+  window.addEventListener('beforeunload', () => { saveWorkbook(state); maybeBackup(true); });
+
+  // Keyboard: Cmd/Ctrl+S save, Cmd/Ctrl+M mark artifact
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveWorkbook(state); maybeBackup(true); setSaveState('saved'); toast('Saved'); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'm') { e.preventDefault(); if (!el.markBtn.disabled) promptCreateArtifact(); }
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); toggleModelSpace(); }
+    // Escape leaves model space and returns to the writing surface (unless a dialog is open)
+    if (e.key === 'Escape' && state.ui.modelSpace && !document.querySelector('#dialogOverlay.open')) {
+      toggleModelSpace();
+    }
+  });
+
+  // Drag-and-drop JSON import anywhere on the app
+  let dragDepth = 0;
+  window.addEventListener('dragenter', (e) => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+      dragDepth++; el.dropVeil.classList.add('show');
+    }
+  });
+  window.addEventListener('dragover', (e) => { e.preventDefault(); });
+  window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) el.dropVeil.classList.remove('show'); });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault(); dragDepth = 0; el.dropVeil.classList.remove('show');
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!file) return;
+    if (!/\.json$/i.test(file.name) && file.type !== 'application/json') { toast('Drop a .json workbook file'); return; }
+    importWorkbook(file, (ok, imported) => {
+      if (!ok) { toast('Import failed — file was invalid. Session unchanged.'); return; }
+      confirmDialog('Replace current workbook?', 'Importing “' + file.name + '” will replace your current workbook. A snapshot of the current state is taken first.', 'Import',
+        () => { maybeBackup(true); state = imported; el.editor.dataset.pageId = ''; commit({ immediate: true }); toast('Workbook imported'); });
+    });
+  });
+}
+
+/* Scroll the notebook to the first occurrence of a query and pulse it. */
+function jumpToText(q) {
+  if (!q) return;
+  requestAnimationFrame(() => {
+    const ql = q.toLowerCase();
+    const walker = document.createTreeWalker(el.editor, NodeFilter.SHOW_TEXT, null);
+    let node;
+    while ((node = walker.nextNode())) {
+      const i = node.textContent.toLowerCase().indexOf(ql);
+      if (i >= 0) {
+        const range = document.createRange();
+        range.setStart(node, i);
+        range.setEnd(node, Math.min(node.textContent.length, i + q.length));
+        const rect = range.getBoundingClientRect();
+        const container = el.editor.closest('.notebook-pane');
+        if (rect && container) {
+          container.scrollTo({ top: container.scrollTop + rect.top - container.clientHeight / 2, behavior: 'smooth' });
+        }
+        // brief visual pulse using a temporary highlight overlay
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(range);
+        setTimeout(() => sel.removeAllRanges(), 1200);
+        break;
+      }
+    }
+  });
+}
+
+/* Artifact subtype picker dialog. */
+function artifactDialog(quote, onChoose) {
+  const overlay = $('#dialogOverlay');
+  $('#dlgTitle').textContent = 'Create artifact';
+  const body = $('#dlgBody');
+  body.innerHTML = '';
+  const preview = document.createElement('div');
+  preview.className = 'quote-preview';
+  preview.textContent = quote.length > 220 ? quote.slice(0, 220) + '…' : quote;
+  const label = document.createElement('p');
+  label.className = 'insp-label';
+  label.style.margin = '0 0 4px';
+  label.textContent = 'Choose a type';
+  const picker = document.createElement('div');
+  picker.className = 'type-picker';
+  let chosen = 'claim';
+  SUBTYPES.forEach(s => {
+    const opt = document.createElement('button');
+    opt.className = 'type-opt' + (s === chosen ? ' active' : '');
+    opt.textContent = s;
+    opt.addEventListener('click', () => {
+      chosen = s;
+      picker.querySelectorAll('.type-opt').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    picker.appendChild(opt);
+  });
+  body.appendChild(preview); body.appendChild(label); body.appendChild(picker);
+  const actions = $('#dlgActions');
+  actions.innerHTML = '';
+  actions.appendChild(mkBtn('Cancel', 'btn', () => closeDialog()));
+  actions.appendChild(mkBtn('Create', 'btn primary', () => { closeDialog(); onChoose(chosen); }));
+  overlay.classList.add('open');
+  function esc(e) { if (e.key === 'Escape') closeDialog(); }
+  document.addEventListener('keydown', esc);
+  overlay._esc = esc;
+}
+
+/* ---------- relate dialog: pick target + kind + label (+ weight for links) ---------- */
+function promptRelate(sourceArtifact) {
+  const candidates = state.artifacts.filter(a => a.id !== sourceArtifact.id);
+  if (!candidates.length) { toast('Create another artifact first to relate to'); return; }
+
+  const overlay = $('#dialogOverlay');
+  $('#dlgTitle').textContent = 'Relate ' + sourceArtifact.id;
+  const body = $('#dlgBody');
+  body.innerHTML = '';
+
+  let kind = 'connection';
+  let weight = 2;
+
+  // kind picker (structural vs conceptual)
+  const kindLabel = document.createElement('p');
+  kindLabel.className = 'insp-label'; kindLabel.style.margin = '0 0 4px';
+  kindLabel.textContent = 'Relation kind';
+  const kindPicker = document.createElement('div');
+  kindPicker.className = 'type-picker';
+  [['connection', 'Connection — structural'], ['link', 'Link — conceptual']].forEach(([k, txt]) => {
+    const opt = document.createElement('button');
+    opt.className = 'type-opt' + (k === kind ? ' active' : '');
+    opt.textContent = txt; opt.dataset.k = k;
+    opt.addEventListener('click', () => {
+      kind = k;
+      kindPicker.querySelectorAll('.type-opt').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      weightWrap.style.display = (k === 'link') ? 'block' : 'none';
+    });
+    kindPicker.appendChild(opt);
+  });
+
+  // target picker
+  const targetLabel = document.createElement('p');
+  targetLabel.className = 'insp-label'; targetLabel.style.margin = '12px 0 4px';
+  targetLabel.textContent = 'Target artifact';
+  const select = document.createElement('select');
+  select.className = 'relate-select';
+  candidates.forEach(c => {
+    const o = document.createElement('option');
+    o.value = c.id; o.textContent = artifactLabel(state, c.id);
+    select.appendChild(o);
+  });
+
+  // label
+  const relLabel = document.createElement('p');
+  relLabel.className = 'insp-label'; relLabel.style.margin = '12px 0 4px';
+  relLabel.textContent = 'Label (optional)';
+  const input = document.createElement('input');
+  input.className = 'relate-input'; input.type = 'text';
+  input.placeholder = kind === 'connection' ? 'e.g. depends on, part of' : 'e.g. echoes, contrasts with';
+
+  // weight (links only)
+  const weightWrap = document.createElement('div');
+  weightWrap.style.display = 'none'; weightWrap.style.marginTop = '12px';
+  const wLabel = document.createElement('p');
+  wLabel.className = 'insp-label'; wLabel.style.margin = '0 0 4px';
+  wLabel.textContent = 'Strength';
+  const wPicker = document.createElement('div');
+  wPicker.className = 'type-picker';
+  [1, 2, 3].forEach(w => {
+    const opt = document.createElement('button');
+    opt.className = 'type-opt' + (w === weight ? ' active' : '');
+    opt.textContent = '●'.repeat(w);
+    opt.addEventListener('click', () => {
+      weight = w;
+      wPicker.querySelectorAll('.type-opt').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+    });
+    wPicker.appendChild(opt);
+  });
+  weightWrap.appendChild(wLabel); weightWrap.appendChild(wPicker);
+
+  body.appendChild(kindLabel); body.appendChild(kindPicker);
+  body.appendChild(targetLabel); body.appendChild(select);
+  body.appendChild(relLabel); body.appendChild(input);
+  body.appendChild(weightWrap);
+
+  const actions = $('#dlgActions');
+  actions.innerHTML = '';
+  actions.appendChild(mkBtn('Cancel', 'btn', () => closeDialog()));
+  actions.appendChild(mkBtn('Relate', 'btn primary', () => {
+    const target = select.value;
+    const label = input.value.trim();
+    let rel;
+    if (kind === 'connection') rel = createConnection(state, { source: sourceArtifact.id, target, label });
+    else rel = createLink(state, { source: sourceArtifact.id, target, label, weight });
+    closeDialog();
+    if (!rel) { toast('That relation already exists (or is invalid)'); return; }
+    state.ui.selectedRelationId = rel.id;
+    commit({ immediate: true });
+    toast((kind === 'connection' ? 'Connection ' : 'Link ') + rel.id + ' created');
+  }));
+  overlay.classList.add('open');
+  function esc(e) { if (e.key === 'Escape') closeDialog(); }
+  document.addEventListener('keydown', esc);
+  overlay._esc = esc;
+}
+
+/* ---------- delete flow with continuity protection ---------- */
+function attemptDelete(pageId) {
+  const p = state.pages.find(x => x.id === pageId);
+  if (!p) return;
+  if (p.pinned) {
+    // Non-destructible continuity page — explain + offer rename/archive (blueprint §8)
+    confirmDialog(
+      'The continuity page cannot be deleted',
+      'This page anchors your workbook across sessions, so it is protected. You can rename it, or clear its contents instead of deleting it.',
+      'Clear contents',
+      () => {
+        p.html = '<p></p>'; p.plainText = ''; p.updatedAt = now();
+        el.editor.dataset.pageId = ''; // force editor refresh
+        commit({ immediate: true }); toast('Continuity page cleared');
+      },
+      'Rename',
+      () => { el.pageTitle.focus(); el.pageTitle.select(); }
+    );
+    return;
+  }
+  confirmDialog(
+    'Delete this page?',
+    'Deleting \u201C' + p.title + '\u201D cannot be undone from here. Export first if you want a backup.',
+    'Delete',
+    () => { deletePage(state, pageId); commit({ immediate: true }); toast('Page deleted'); }
+  );
+}
+
+/* ============================================================
+   DIALOG + TOAST
+   ============================================================ */
+function confirmDialog(title, body, confirmLabel, onConfirm, altLabel, onAlt) {
+  const overlay = $('#dialogOverlay');
+  $('#dlgTitle').textContent = title;
+  $('#dlgBody').textContent = body;
+  const actions = $('#dlgActions');
+  actions.innerHTML = '';
+  const cancel = mkBtn('Cancel', 'btn', () => closeDialog());
+  actions.appendChild(cancel);
+  if (altLabel) actions.appendChild(mkBtn(altLabel, 'btn', () => { closeDialog(); onAlt && onAlt(); }));
+  actions.appendChild(mkBtn(confirmLabel, 'btn primary', () => { closeDialog(); onConfirm && onConfirm(); }));
+  overlay.classList.add('open');
+  function esc(e) { if (e.key === 'Escape') closeDialog(); }
+  document.addEventListener('keydown', esc);
+  overlay._esc = esc;
+}
+function closeDialog() {
+  const overlay = $('#dialogOverlay');
+  overlay.classList.remove('open');
+  if (overlay._esc) document.removeEventListener('keydown', overlay._esc);
+}
+function mkBtn(label, cls, fn) {
+  const b = document.createElement('button');
+  b.className = cls; b.textContent = label; b.addEventListener('click', fn);
+  return b;
+}
+$('#dialogOverlay').addEventListener('click', (e) => { if (e.target.id === 'dialogOverlay') closeDialog(); });
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+/* ============================================================
+   MINIMAL STARTUP SEQUENCE
+   ============================================================ */
+function boot() {
+  cacheEls();
+  bindEditor();
+  bindUI();
+  render();
+  setSaveState('saved');
+  saveWorkbook(state);
+  maybeBackup(true);           // initial snapshot
+  if (state.preferences.autoExport) startAutoExport();
+  // periodic rolling backup while active
+  setInterval(() => maybeBackup(false), 30000);
+}
+boot();
+</script>
+</body>
+</html>
