@@ -1,4 +1,4 @@
-# Genesis-Field-Notes
+
 Genesis Field Notes
 
 A notebook-first digital notebook.
